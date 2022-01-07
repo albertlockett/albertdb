@@ -4,6 +4,7 @@ use std::cell::Ref;
 use std::cell::RefMut;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::mem;
 
 struct Node<T: PartialOrd, U: PartialOrd> {
   key: T,
@@ -26,6 +27,22 @@ struct RotateConfig {
 }
 
 impl<T, U> Memtable3<T, U> where T: PartialOrd, U: PartialOrd {
+  fn rotate_left(&mut self, mut x :Node<T, U>) {
+
+  }
+
+  fn rotate_right5(&mut self, mut x: Node<T, U>) {
+    let mut y = mem::replace(&mut x.parent, None);
+    let xr = mem::replace(&mut x.right, None);
+
+    x.right = Some(y.as_ref().unwrap().clone());
+    y.as_mut().unwrap().borrow_mut().deref_mut().left = xr;
+    
+    let yn = &mut y.as_mut().unwrap().borrow_mut();
+    let p = &mut yn.parent.as_mut().unwrap().borrow_mut();
+    p.left = Some(Rc::new(RefCell::new(x)));
+  }
+
   fn rotate_right4(&mut self, rconf: &RotateConfig, mut x: Node<T, U>) {
     if rconf.root {
       self.root = Some(Rc::new(RefCell::new(x)));
