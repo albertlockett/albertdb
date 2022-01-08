@@ -14,6 +14,22 @@ struct Node<T: PartialOrd, U: PartialOrd> {
   parent: Link<T, U>,
 }
 
+impl <T, U> Node<T, U> where T: PartialOrd, U: PartialOrd {
+  fn set_right(&mut self, link: Link<T, U>) {
+
+  }
+
+  fn set_left(&mut self, link: Link<T, U>) {
+    let right = self.right.as_mut().unwrap().borrow();
+    let right_parent = right.parent.as_ref().unwrap();
+    let self_ref = right_parent.clone();
+    
+    self.left = link;
+    let node = &mut self.left.as_mut().unwrap().borrow_mut();
+    node.parent = Some(self_ref);
+  }
+}
+
 type Link<T, U> = Option<Rc<RefCell<Node<T, U>>>>;
 
 struct Memtable3<T: PartialOrd, U: PartialOrd> {
@@ -27,8 +43,20 @@ struct RotateConfig {
 }
 
 impl<T, U> Memtable3<T, U> where T: PartialOrd, U: PartialOrd {
-  fn rotate_left(&mut self, mut x :Node<T, U>) {
+  fn rotate_left(&mut self, mut x: Node<T, U>) {
 
+  }
+
+  fn rotate_right6(&mut self, x: &mut Rc<RefCell<Node<T, U>>>) {
+    let y: Rc<RefCell<Node<T, U>>> = x.borrow_mut().parent.as_mut().unwrap().clone();
+    let p: Rc<RefCell<Node<T, U>>> = y.borrow_mut().parent.as_mut().unwrap().clone();
+    let xr: Rc<RefCell<Node<T, U>>> = x.borrow_mut().right.as_mut().unwrap().clone();
+    xr.borrow_mut().parent = Some(y.clone());
+    x.borrow_mut().right = Some(y.clone());
+    x.borrow_mut().parent = Some(p.clone());
+    y.borrow_mut().parent = Some(x.clone());
+    y.borrow_mut().left = Some(xr.clone());
+    p.borrow_mut().left = Some(x.clone());
   }
 
   fn rotate_right5(&mut self, mut x: Node<T, U>) {
@@ -41,6 +69,8 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd, U: PartialOrd {
     let yn = &mut y.as_mut().unwrap().borrow_mut();
     let p = &mut yn.parent.as_mut().unwrap().borrow_mut();
     p.left = Some(Rc::new(RefCell::new(x)));
+
+    
   }
 
   fn rotate_right4(&mut self, rconf: &RotateConfig, mut x: Node<T, U>) {

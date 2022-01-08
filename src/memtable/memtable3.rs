@@ -156,7 +156,7 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd, U: PartialOrd {
     
     if y_is_left {
       let mut p3m = (*p1).borrow_mut();
-      p3m.right = Some(Box::new(x));
+      // p3m.right = Some(Box::new(x));
     }
   }
 
