@@ -88,22 +88,30 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug{
         && new_node.borrow().priority < new_node.borrow().parent.as_ref().unwrap().borrow().priority {
 
       println!("new_node = {:?}", new_node);
-      // let rotate_right = false;
-      // if 
-      if Rc::ptr_eq(&new_node, new_node.borrow().parent.as_ref().unwrap().borrow().left.as_ref().unwrap()) {
+      
+      let mut rotate_right = false;
+      
+      // massive brain move
+      {
+        let nnb = new_node.borrow();
+        let parent_left_o = &nnb.parent.as_ref().unwrap().borrow().left;
+        if !matches!(parent_left_o, None) {
+          rotate_right = Rc::ptr_eq(&new_node, parent_left_o.as_ref().unwrap())
+        }
+      }
+
+      if rotate_right {
         self.rotate_right(&mut new_node.clone());
       } else {
-        // TODO rotate left 
-        println!("gonna try rotate left");
-        panic!("rotate_left")
+        self.rotate_left(&mut new_node.clone());
       }
       
-      println!("parent is none {:?}", matches!(new_node.borrow().parent, None) );
-      println!("new_node_priority = {:?} parent_priority = {:?}", 
-        new_node.borrow().priority,
-        new_node.borrow().parent.as_ref()
-      );
-      println!("here: {:?}", self);
+      // println!("parent is none {:?}", matches!(new_node.borrow().parent, None) );
+      // println!("new_node_priority = {:?} parent_priority = {:?}", 
+      //   new_node.borrow().priority,
+      //   new_node.borrow().parent.as_ref()
+      // );
+      // println!("here: {:?}", self);
     }
 
     if matches!(new_node.borrow().parent, None) {
@@ -111,15 +119,48 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug{
     }
   }
 
-  fn rotate_right(&mut self, x: &mut Rc<RefCell<Node<T, U>>>) {
+  fn rotate_left(&mut self, x: &mut Rc<RefCell<Node<T, U>>>) {
     let y: Rc<RefCell<Node<T, U>>> = x.borrow_mut().parent.as_mut().unwrap().clone();
 
-    println!("x = {:?}, y = {:?}", x, y);
     if matches!(y.borrow().parent, None) {
       x.clone().borrow_mut().parent = None;
       self.root = Some(x.clone());
     } else {
-      println!("here 2");
+      let p: Rc<RefCell<Node< T, U>>> = y.borrow_mut().parent.as_mut().unwrap().clone();
+      
+      let mut put_on_left = false;
+      if !matches!(p.borrow().left, None) {
+        let pl = p.borrow().left.as_ref().unwrap().clone();
+        put_on_left = Rc::ptr_eq(&p, &pl);
+      }
+
+      if put_on_left {
+        p.borrow_mut().left = Some(x.clone());
+      } else {
+        p.borrow_mut().right = Some(x.clone());
+      }
+      x.borrow_mut().parent = Some(p.clone());
+    }
+
+    if !matches!(x.borrow_mut().left, None) {
+      let xl: Rc<RefCell<Node<T, U>>> = x.borrow_mut().right.as_mut().unwrap().clone();
+      xl.borrow_mut().parent = Some(y.clone());
+      y.borrow_mut().right = Some(xl.clone());
+    } else {
+      y.borrow_mut().left = None;
+    }
+
+    x.borrow_mut().left = Some(y.clone());
+    y.borrow_mut().parent = Some(x.clone());
+  }
+
+  fn rotate_right(&mut self, x: &mut Rc<RefCell<Node<T, U>>>) {
+    let y: Rc<RefCell<Node<T, U>>> = x.borrow_mut().parent.as_mut().unwrap().clone();
+
+    if matches!(y.borrow().parent, None) {
+      x.clone().borrow_mut().parent = None;
+      self.root = Some(x.clone());
+    } else {
 
       let p: Rc<RefCell<Node<T, U>>> = y.borrow_mut().parent.as_mut().unwrap().clone();
       let mut put_on_left = false;
@@ -136,7 +177,6 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug{
       x.borrow_mut().parent = Some(p.clone());
     }
 
-    
     if !matches!(x.borrow_mut().right, None) {
       let xr: Rc<RefCell<Node<T, U>>> = x.borrow_mut().right.as_mut().unwrap().clone();
       xr.borrow_mut().parent = Some(y.clone());
@@ -154,39 +194,10 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug{
 #[test]
 fn my_test() {
   let mut m = Memtable3::<i32,i32>::new();
-  m.insert(4, 1);
-  m.insert(2, 1);
-  m.insert(5, 1);
+  m.insert(4, 3);
+  m.insert(2, 2);
+  m.insert(5, 3);
+  m.insert(5, 2);
   
-  println!("\n\n result: {:?}", m);
+  // println!("\n\n result: {:?}", m);
 }
-
-/*
-  { 
-    root: Some(RefCell { 
-      value: Node { 
-        key: 6, 
-        priority: 1, 
-        left: None, 
-        right: Some(RefCell { 
-          value: Node {
-            key: 5, 
-            priority: 2, 
-            left: None, 
-            right: Some(RefCell { 
-              value: Node { 
-                key: 4,
-                priority: 3, 
-                left: None, 
-                right: None, 
-                parent: "some" 
-              } 
-            }), 
-            parent: "some" 
-          } 
-        }), 
-        parent: "none" 
-      } 
-    }) 
-  }
-*/
