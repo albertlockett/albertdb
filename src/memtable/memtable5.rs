@@ -10,6 +10,16 @@ struct Node<T: PartialOrd, U: PartialOrd> {
   parent: Link<T, U>,
 }
 
+trait NodeStuff<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug {
+  fn is_cool() -> bool;
+
+  fn get_parent(&self) -> Link<T, U>;
+
+  fn set_parent(&self, parent: Link<T, U>);
+
+  fn is_left_child(&self, child: Link<T, U>) -> bool;
+}
+
 impl<T, U> std::fmt::Debug for Node<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       f.debug_struct("Node")
@@ -30,6 +40,33 @@ impl<T, U> std::fmt::Debug for Node<T, U> where T: PartialOrd + Debug, U: Partia
 }
 
 type Link<T, U> = Option<Rc<RefCell<Node<T, U>>>>;
+
+impl<T, U> NodeStuff<T, U> for Rc<RefCell<Node<T, U>>> where T: PartialOrd + Debug, U: PartialOrd + Debug {
+  fn is_cool() -> bool {
+    true
+  }
+
+  fn get_parent(&self) -> Link<T, U> {
+    if matches!(self.borrow().parent, None) {
+      return None;
+    }
+    return Some(self.borrow_mut().parent.as_mut().unwrap().clone());
+  }
+
+  fn set_parent(&self, parent: Link<T, U>) {
+    let node = self.clone();
+    node.borrow_mut().parent = parent;
+  }
+
+  fn is_left_child(&self, child: Link<T, U>) -> bool {
+    if !matches!(self.borrow().left, None) {
+      return false;
+    }
+    false
+  }
+
+
+}
 
 #[derive(Debug)]
 pub struct Memtable3<T: PartialOrd + Debug, U: PartialOrd + Debug> {
@@ -120,21 +157,14 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug{
   }
 
   fn rotate_left(&mut self, x: &mut Rc<RefCell<Node<T, U>>>) {
-    let y: Rc<RefCell<Node<T, U>>> = x.borrow_mut().parent.as_mut().unwrap().clone();
+    let y = x.get_parent().unwrap();
 
-    if matches!(y.borrow().parent, None) {
-      x.clone().borrow_mut().parent = None;
+    if matches!(y.get_parent(), None) {
+      x.set_parent(None);
       self.root = Some(x.clone());
     } else {
-      let p: Rc<RefCell<Node< T, U>>> = y.borrow_mut().parent.as_mut().unwrap().clone();
-      
-      let mut put_on_left = false;
-      if !matches!(p.borrow().left, None) {
-        let pl = p.borrow().left.as_ref().unwrap().clone();
-        put_on_left = Rc::ptr_eq(&p, &pl);
-      }
-
-      if put_on_left {
+      let p = y.get_parent().unwrap();
+      if p.is_left_child(Some(y.clone())) {
         p.borrow_mut().left = Some(x.clone());
       } else {
         p.borrow_mut().right = Some(x.clone());
