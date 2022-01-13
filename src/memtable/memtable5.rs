@@ -243,30 +243,31 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug{
   }
 
   fn rotate_right(&mut self, x: &mut Rc<RefCell<Node<T, U>>>) {
-    let y: Rc<RefCell<Node<T, U>>> = x.borrow_mut().parent.as_mut().unwrap().clone();
+    if matches!(x.get_parent(), None) {
+      panic!("cannot rotate the root of the tree");
+    }
 
-    if matches!(y.borrow().parent, None) {
-      x.clone().borrow_mut().parent = None;
+    let y = x.get_parent().unwrap();
+
+    if y.is_right_child(Some(x.clone())) {
+      panic!("cannot rotate_right on a right child");
+    }
+
+    if matches!(y.get_parent(), None) {
+      x.set_parent(None);
       self.root = Some(x.clone());
     } else {
-
-      let p: Rc<RefCell<Node<T, U>>> = y.borrow_mut().parent.as_mut().unwrap().clone();
-      let mut put_on_left = false;
-      if !matches!(p.borrow().left, None) {
-        let pl = p.borrow().left.as_ref().unwrap().clone();
-        put_on_left = Rc::ptr_eq(&p, &pl);
-      }
-      
-      if put_on_left {
-        p.borrow_mut().left = Some(x.clone());
+      let p = y.get_parent().unwrap();
+      if p.is_left_child(Some(y.clone())) {
+        p.set_left(Some(x.clone()));
       } else {
-        p.borrow_mut().right = Some(x.clone());
+        p.set_right(Some(x.clone()));
       }
-      x.borrow_mut().parent = Some(p.clone());
+      x.set_parent(Some(p.clone()));
     }
 
     y.set_left(x.get_right());
-    if matches!(x.get_right(), None) {
+    if !matches!(x.get_right(), None) {
       let x_right = x.get_right().unwrap();
       x_right.set_parent(Some(y.clone()));
     }
@@ -277,203 +278,397 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug{
 
 }
 
-#[test]
-fn test_rotate_left_full_rotation() {
-  let mut m = Memtable3::<i32,i32>::new();
-  let p = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 0,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None
-  }));
-  let y = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 1,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None
-  }));
-  let x = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 2,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None,
-  }));
-  let x_left = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 3,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None,
-  }));
+#[cfg(test)]
+mod rotate_left_tests {
+  use super::*;
 
-  m.root = Some(p.clone());
-  p.set_right(Some(y.clone()));
-  y.set_parent(Some(p.clone()));
+  #[test]
+  fn test_rotate_left_full_rotation() {
+    let mut m = Memtable3::<i32,i32>::new();
+    let p = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 0,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None
+    }));
+    let y = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 1,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None
+    }));
+    let x = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 2,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+    let x_left = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 3,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None,
+    }));
 
-  y.set_right(Some(x.clone()));
-  x.set_parent(Some(y.clone()));
+    m.root = Some(p.clone());
+    p.set_right(Some(y.clone()));
+    y.set_parent(Some(p.clone()));
 
-  x.set_left(Some(x_left.clone()));
-  x_left.set_parent(Some(y.clone()));
+    y.set_right(Some(x.clone()));
+    x.set_parent(Some(y.clone()));
 
-  m.rotate_left(&mut x.clone());
+    x.set_left(Some(x_left.clone()));
+    x_left.set_parent(Some(y.clone()));
 
-  // check x has now replaced y as the right child of P
-  assert_eq!(false, matches!(p.get_right(), None));
-  assert_eq!(true, p.is_right_child(Some(x.clone())));
-  assert_eq!(false, matches!(x.get_parent(), None));
-  assert_eq!(true, x.is_parent(Some(p.clone())));
+    m.rotate_left(&mut x.clone());
 
-  // check Y is now the left child of X
-  assert_eq!(false, matches!(x.get_left(), None));
-  assert_eq!(true, x.is_left_child(Some(y.clone())));
-  assert_eq!(false, matches!(y.get_parent(), None));
-  assert_eq!(true, y.is_parent(Some(x)));
+    // check x has now replaced y as the right child of P
+    assert_eq!(false, matches!(p.get_right(), None));
+    assert_eq!(true, p.is_right_child(Some(x.clone())));
+    assert_eq!(false, matches!(x.get_parent(), None));
+    assert_eq!(true, x.is_parent(Some(p.clone())));
 
-  // check X's left is now the right child of Y
-  assert_eq!(false, matches!(y.get_right(), None));
-  assert_eq!(true, y.is_right_child(Some(x_left.clone())));
-  assert_eq!(false, matches!(x_left.get_parent(), None));
-  assert_eq!(true, x_left.is_parent(Some(y)));
+    // check Y is now the left child of X
+    assert_eq!(false, matches!(x.get_left(), None));
+    assert_eq!(true, x.is_left_child(Some(y.clone())));
+    assert_eq!(false, matches!(y.get_parent(), None));
+    assert_eq!(true, y.is_parent(Some(x)));
+
+    // check X's left is now the right child of Y
+    assert_eq!(false, matches!(y.get_right(), None));
+    assert_eq!(true, y.is_right_child(Some(x_left.clone())));
+    assert_eq!(false, matches!(x_left.get_parent(), None));
+    assert_eq!(true, x_left.is_parent(Some(y)));
+  }
+
+  #[test]
+  fn test_rotate_left_full_y_is_left_child_of_p() {
+    let mut m = Memtable3::<i32,i32>::new();
+    let p = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 0,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None
+    }));
+    let y = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 1,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None
+    }));
+    let x = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 2,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+    let x_left = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 3,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+
+    m.root = Some(p.clone());
+    p.set_left(Some(y.clone()));
+    y.set_parent(Some(p.clone()));
+
+    y.set_right(Some(x.clone()));
+    x.set_parent(Some(y.clone()));
+
+    x.set_left(Some(x_left.clone()));
+    x_left.set_parent(Some(y.clone()));
+
+    m.rotate_left(&mut x.clone());
+
+    // check x has now replaced y as the right child of P
+    assert_eq!(false, matches!(p.get_left(), None));
+    assert_eq!(true, p.is_left_child(Some(x.clone())));
+    assert_eq!(false, matches!(x.get_parent(), None));
+    assert_eq!(true, x.is_parent(Some(p.clone())));
+
+    // check Y is now the left child of X
+    assert_eq!(false, matches!(x.get_left(), None));
+    assert_eq!(true, x.is_left_child(Some(y.clone())));
+    assert_eq!(false, matches!(y.get_parent(), None));
+    assert_eq!(true, y.is_parent(Some(x)));
+
+    // check X's left is now the right child of Y
+    assert_eq!(false, matches!(y.get_right(), None));
+    assert_eq!(true, y.is_right_child(Some(x_left.clone())));
+    assert_eq!(false, matches!(x_left.get_parent(), None));
+    assert_eq!(true, x_left.is_parent(Some(y)));
+  }
+
+  #[test]
+  fn test_rotate_left_parent_is_root() {
+    let mut m = Memtable3::<i32,i32>::new();
+    let p = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 0,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None
+    }));
+
+    let x = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 2,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+
+    m.root = Some(p.clone());
+    p.set_right(Some(x.clone()));
+    x.set_parent(Some(p.clone()));
+
+    m.rotate_left(&mut x.clone());
+
+    assert_eq!(true, Rc::ptr_eq(&x, m.root.as_ref().unwrap()));
+    assert_eq!(true, matches!(x.get_parent(), None));
+
+    assert_eq!(true, x.is_left_child(Some(p.clone())));
+    assert_eq!(true, p.is_parent(Some(x.clone())));
+
+    assert_eq!(true, matches!(p.get_right(), None));
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_rotate_left_panics_if_x_is_root() {
+    let mut m = Memtable3::<i32,i32>::new();
+    let x = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 0,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None
+    }));
+    m.root = Some(x.clone());
+    m.rotate_left(&mut x.clone());
+  }
+
+  #[test]
+  #[should_panic]
+  fn test_rotate_left_panics_if_x_is_left_child() {
+    let mut m = Memtable3::<i32,i32>::new();
+    let p = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 0,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None
+    }));
+
+    let x = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 2,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+
+    m.root = Some(p.clone());
+    p.set_left(Some(x.clone()));
+    x.set_parent(Some(p.clone()));
+    m.rotate_left(&mut x.clone());
+  }
 }
 
-#[test]
-fn test_rotate_left_full_y_is_left_child_of_p() {
-  let mut m = Memtable3::<i32,i32>::new();
-  let p = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 0,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None
-  }));
-  let y = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 1,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None
-  }));
-  let x = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 2,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None,
-  }));
-  let x_left = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 3,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None,
-  }));
+#[cfg(test)]
+mod rotate_right_tests {
+  use super::*;
+  
+  #[test]
+  #[should_panic]
+  fn panics_if_x_is_root() {
+    let mut m = Memtable3::<i32,i32>::new();
+    let x = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 0,
+      priority: 0,
+      left: None,
+      right: None,
+      parent: None
+    }));
+    m.root = Some(x.clone());
+    m.rotate_right(&mut x.clone());
+  }
 
-  m.root = Some(p.clone());
-  p.set_left(Some(y.clone()));
-  y.set_parent(Some(p.clone()));
+  #[test]
+  #[should_panic]
+  fn panics_if_x_is_right_child() {
+    let mut m = Memtable3::<i32, i32>::new();
+    let p = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 0,
+      priority:0,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+    let x = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 1,
+      priority:2,
+      left: None,
+      right: None,
+      parent: None,
+    }));
 
-  y.set_right(Some(x.clone()));
-  x.set_parent(Some(y.clone()));
+    m.root = Some(p.clone());
+    p.set_right(Some(x.clone()));
+    x.set_parent(Some(p.clone()));
 
-  x.set_left(Some(x_left.clone()));
-  x_left.set_parent(Some(y.clone()));
+    m.rotate_right(&mut x.clone());
+  }
 
-  m.rotate_left(&mut x.clone());
+  #[test]
+  fn handles_case_where_x_parent_is_root() {
+    let mut m = Memtable3::<i32, i32>::new();
+    let p = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 0,
+      priority:0,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+    let x = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 1,
+      priority:2,
+      left: None,
+      right: None,
+      parent: None,
+    }));
 
-  // check x has now replaced y as the right child of P
-  assert_eq!(false, matches!(p.get_left(), None));
-  assert_eq!(true, p.is_left_child(Some(x.clone())));
-  assert_eq!(false, matches!(x.get_parent(), None));
-  assert_eq!(true, x.is_parent(Some(p.clone())));
+    m.root = Some(p.clone());
+    p.set_left(Some(x.clone()));
+    x.set_parent(Some(p.clone()));
 
-  // check Y is now the left child of X
-  assert_eq!(false, matches!(x.get_left(), None));
-  assert_eq!(true, x.is_left_child(Some(y.clone())));
-  assert_eq!(false, matches!(y.get_parent(), None));
-  assert_eq!(true, y.is_parent(Some(x)));
+    m.rotate_right(&mut x.clone());
 
-  // check X's left is now the right child of Y
-  assert_eq!(false, matches!(y.get_right(), None));
-  assert_eq!(true, y.is_right_child(Some(x_left.clone())));
-  assert_eq!(false, matches!(x_left.get_parent(), None));
-  assert_eq!(true, x_left.is_parent(Some(y)));
-}
+    assert_eq!(true, Rc::ptr_eq(&x, m.root.as_ref().unwrap()));
+    assert_eq!(true, matches!(x.get_parent(), None));
 
-#[test]
-fn test_rotate_left_parent_is_root() {
-  let mut m = Memtable3::<i32,i32>::new();
-  let p = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 0,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None
-  }));
+    assert_eq!(true, x.is_right_child(Some(p.clone())));
+    assert_eq!(true, p.is_parent(Some(x.clone())));
 
-  let x = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 2,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None,
-  }));
+    assert_eq!(true, matches!(p.get_left(), None));
+  }
 
-  m.root = Some(p.clone());
-  p.set_right(Some(x.clone()));
-  x.set_parent(Some(p.clone()));
+  #[test]
+  fn full_rotate_y_is_p_right_child() {
+    let mut m = Memtable3::<i32, i32>::new();
+    let p = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 0,
+      priority:0,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+    let y = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 1,
+      priority:1,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+    let x = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 2,
+      priority:2,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+    let x_right = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 3,
+      priority:3,
+      left: None,
+      right: None,
+      parent: None,
+    }));
 
-  m.rotate_left(&mut x.clone());
+    m.root = Some(p.clone());
 
-  assert_eq!(true, Rc::ptr_eq(&x, m.root.as_ref().unwrap()));
-  assert_eq!(true, matches!(x.get_parent(), None));
+    p.set_right(Some(y.clone()));
+    y.set_parent(Some(p.clone()));
 
-  assert_eq!(true, x.is_left_child(Some(p.clone())));
-  assert_eq!(true, p.is_parent(Some(x.clone())));
+    y.set_left(Some(x.clone()));
+    x.set_parent(Some(y.clone()));
 
-  assert_eq!(true, matches!(p.get_right(), None));
-}
+    x.set_right(Some(x_right.clone()));
+    x_right.set_parent(Some(x.clone()));
 
-#[test]
-#[should_panic]
-fn test_rotate_left_panics_if_x_is_root() {
-  let mut m = Memtable3::<i32,i32>::new();
-  let x = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 0,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None
-  }));
-  m.root = Some(x.clone());
-  m.rotate_left(&mut x.clone());
-}
+    m.rotate_right(&mut x.clone());
 
-#[test]
-#[should_panic]
-fn test_rotate_left_panics_if_x_is_left_child() {
-  let mut m = Memtable3::<i32,i32>::new();
-  let p = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 0,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None
-  }));
+    assert_eq!(true, p.is_right_child(Some(x.clone())));
+    assert_eq!(true, x.is_parent(Some(p.clone())));
 
-  let x = Rc::new(RefCell::new(Node::<i32, i32> {
-    key: 2,
-    priority: 0,
-    left: None,
-    right: None,
-    parent: None,
-  }));
+    assert_eq!(true, x.is_right_child(Some(y.clone())));
+    assert_eq!(true, y.is_parent(Some(x.clone())));
 
-  m.root = Some(p.clone());
-  p.set_left(Some(x.clone()));
-  x.set_parent(Some(p.clone()));
-  m.rotate_left(&mut x.clone());
+    assert_eq!(true, y.is_left_child(Some(x_right.clone())));
+    assert_eq!(true, x_right.is_parent(Some(y.clone())));
+  }
+
+  #[test]
+  fn full_rotate_y_is_p_left_child() {
+    let mut m = Memtable3::<i32, i32>::new();
+    let p = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 0,
+      priority:0,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+    let y = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 1,
+      priority:1,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+    let x = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 2,
+      priority:2,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+    let x_right = Rc::new(RefCell::new(Node::<i32, i32> {
+      key: 3,
+      priority:3,
+      left: None,
+      right: None,
+      parent: None,
+    }));
+
+    m.root = Some(p.clone());
+
+    p.set_left(Some(y.clone()));
+    y.set_parent(Some(p.clone()));
+
+    y.set_left(Some(x.clone()));
+    x.set_parent(Some(y.clone()));
+
+    x.set_right(Some(x_right.clone()));
+    x_right.set_parent(Some(x.clone()));
+
+    m.rotate_right(&mut x.clone());
+
+    assert_eq!(true, p.is_left_child(Some(x.clone())));
+    assert_eq!(true, x.is_parent(Some(p.clone())));
+
+    assert_eq!(true, x.is_right_child(Some(y.clone())));
+    assert_eq!(true, y.is_parent(Some(x.clone())));
+
+    assert_eq!(true, y.is_left_child(Some(x_right.clone())));
+    assert_eq!(true, x_right.is_parent(Some(y.clone())));
+  }
 }
