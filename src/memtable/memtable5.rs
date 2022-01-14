@@ -10,6 +10,8 @@ struct Node<T: PartialOrd, U: PartialOrd> {
   parent: Link<T, U>,
 }
 
+type Link<T, U> = Option<Rc<RefCell<Node<T, U>>>>;
+
 trait NodeStuff<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug {
   fn get_parent(&self) -> Link<T, U>;
 
@@ -30,6 +32,24 @@ trait NodeStuff<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug {
   fn is_parent(&self, child: Link<T, U>) -> bool;
 }
 
+// TODO move this into the Node as a method
+fn is_heap_invariant<T, U>(node_link: Link<T, U>) -> bool where T: PartialOrd + Debug, U: PartialOrd + Debug  {
+  if matches!(node_link, None) {
+    return false;
+  }
+
+  let node = node_link.as_ref().unwrap();
+  let parent_link = node.get_parent();
+  
+  if matches!(parent_link, None) {
+    return false;
+  }
+
+  let parent = parent_link.as_ref().unwrap();
+  return node.borrow().priority > parent.borrow().priority;
+}
+
+
 impl<T, U> std::fmt::Debug for Node<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       f.debug_struct("Node")
@@ -48,8 +68,6 @@ impl<T, U> std::fmt::Debug for Node<T, U> where T: PartialOrd + Debug, U: Partia
        .finish()
   }
 }
-
-type Link<T, U> = Option<Rc<RefCell<Node<T, U>>>>;
 
 impl<T, U> NodeStuff<T, U> for Rc<RefCell<Node<T, U>>> where T: PartialOrd + Debug, U: PartialOrd + Debug {
   fn get_parent(&self) -> Link<T, U> {
@@ -141,70 +159,49 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug{
 
   pub fn insert(&mut self, key: T, priority: U) {
     let new_node = Rc::new(RefCell::new(Node {
-      key,
-      priority,
-      left: None,
-      right: None,
+      key, 
+      priority, 
+      left: None, 
+      right: None, 
       parent: None
     }));
 
-    if matches!(&self.root, None) {
-      self.root = Some(new_node.clone());
+    // oops the tree is empty - new node is the root
+    if matches!(self.root, None) {
+      self.root = Some(new_node);
       return;
     }
 
-    let mut parent = self.root.as_mut().unwrap().clone();
-    loop {
-      if new_node.borrow().key <= parent.borrow().key {
-        if matches!(parent.borrow().left, None) {
-          parent.borrow_mut().left = Some(new_node.clone());
-          break;
-        } else {
-          parent = parent.clone().borrow_mut().left.as_mut().unwrap().clone();
-        }
+    // find the parent of the node we're going to insert
+    let mut node_link: Link<T, U> = Some(self.root.as_ref().unwrap().clone());
+    let mut parent_link: Link<T, U> = None;
+    
+    while !matches!(node_link, None) {
+      let node = node_link.as_ref().unwrap().clone();
+      parent_link = Some(node.clone());
+      if new_node.borrow().key > node.borrow().key {
+        node_link = node.get_right();
       } else {
-        if matches!(parent.borrow().right, None) {
-          parent.borrow_mut().right = Some(new_node.clone());
-          break;
-        } else {
-          parent = parent.clone().borrow_mut().right.as_mut().unwrap().clone();
-        }
+        node_link = node.get_left();
       }
     }
 
-    new_node.clone().borrow_mut().parent = Some(parent.clone());
-    while !matches!(new_node.borrow().parent, None) 
-        && new_node.borrow().priority < new_node.borrow().parent.as_ref().unwrap().borrow().priority {
+    let parent = parent_link.as_ref().unwrap().clone();
+    if parent.borrow().key <= new_node.borrow().key {
+      parent.set_right(Some(new_node.clone()))
+    } else {
+      parent.set_left(Some(new_node.clone()));
+    }
+    new_node.set_parent(Some(parent.clone()));
 
-      println!("new_node = {:?}", new_node);
-      
-      let mut rotate_right = false;
-      
-      // massive brain move
-      {
-        let nnb = new_node.borrow();
-        let parent_left_o = &nnb.parent.as_ref().unwrap().borrow().left;
-        if !matches!(parent_left_o, None) {
-          rotate_right = Rc::ptr_eq(&new_node, parent_left_o.as_ref().unwrap())
-        }
-      }
-
-      if rotate_right {
+    println!("checkin heap invariant");
+    while is_heap_invariant(Some(new_node.clone())) {
+      let parent = new_node.get_parent().unwrap();
+      if parent.is_left_child(Some(new_node.clone())) {
         self.rotate_right(&mut new_node.clone());
       } else {
         self.rotate_left(&mut new_node.clone());
       }
-      
-      // println!("parent is none {:?}", matches!(new_node.borrow().parent, None) );
-      // println!("new_node_priority = {:?} parent_priority = {:?}", 
-      //   new_node.borrow().priority,
-      //   new_node.borrow().parent.as_ref()
-      // );
-      // println!("here: {:?}", self);
-    }
-
-    if matches!(new_node.borrow().parent, None) {
-      self.root = Some(new_node);
     }
   }
 
@@ -214,7 +211,6 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug{
     }
 
     let y = x.get_parent().unwrap();
-
     if y.is_left_child(Some(x.clone())) {
       panic!("cannot rotate_left on a left child");
     }
@@ -275,6 +271,65 @@ impl<T, U> Memtable3<T, U> where T: PartialOrd + Debug, U: PartialOrd + Debug{
     x.set_right(Some(y.clone()));
     y.set_parent(Some(x.clone()));
   }
+
+}
+
+#[cfg(test)]
+mod insert_tests {
+  use super::*;
+
+  #[test]
+  fn test_insert_to_root()  {
+
+  }
+
+  #[test]
+  fn test_insert_some_rotations() {
+    let mut m = Memtable3::<u32, u32>{root: None};
+    let mut p = Rc::new(RefCell::new(Node {
+      key: 50,
+      priority: 50,
+      left: None,
+      right: None,
+      parent: None
+    }));
+    let mut y = Rc::new(RefCell::new(Node{
+      key: 40,
+      priority: 40,
+      left: None,
+      right: None,
+      parent: None
+    }));
+    let mut x = Rc::new(RefCell::new(Node{
+      key: 30,
+      priority: 30,
+      left: None,
+      right: None,
+      parent: None
+    }));
+
+    m.root = Some(p.clone());
+    
+    p.set_left(Some(y.clone()));
+    y.set_parent(Some(p.clone()));
+
+    y.set_left(Some(x.clone()));
+    x.set_parent(Some(y.clone()));
+
+    m.insert(35, 45);
+
+    assert_eq!(true, Rc::ptr_eq(&p, m.root.as_ref().unwrap()));
+    
+    let new_node = p.get_left().unwrap().clone();
+    assert_eq!(35, new_node.borrow().key);
+    
+    assert_eq!(true, new_node.is_left_child(Some(x.clone())));
+    assert_eq!(true, x.is_parent(Some(new_node.clone())));
+    
+    assert_eq!(true, new_node.is_right_child(Some(y.clone())));
+    assert_eq!(true, y.is_parent(Some(new_node.clone())));
+  }
+
 
 }
 
