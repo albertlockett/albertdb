@@ -2,49 +2,41 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
 
-pub struct Node<T: PartialOrd, U: PartialOrd> {
-    key: T,
-    priority: U,
-    left: Link<T, U>,
-    right: Link<T, U>,
-    parent: Link<T, U>,
+pub struct Node {
+    key: Vec<u8>,
+    priority: f64,
+    left: Link,
+    right: Link,
+    parent: Link,
 }
 
-pub type Link<T, U> = Option<Rc<RefCell<Node<T, U>>>>;
+pub type Link = Option<Rc<RefCell<Node>>>;
 
-pub trait NodeStuff<T, U>
-where
-    T: PartialOrd + Debug,
-    U: PartialOrd + Debug,
-{
-    fn get_parent(&self) -> Link<T, U>;
+pub trait NodeStuff {
+    fn get_parent(&self) -> Link;
 
-    fn set_parent(&self, parent: Link<T, U>);
+    fn set_parent(&self, parent: Link);
 
-    fn get_left(&self) -> Link<T, U>;
+    fn get_left(&self) -> Link;
 
-    fn set_left(&self, new_left: Link<T, U>);
+    fn set_left(&self, new_left: Link);
 
-    fn get_right(&self) -> Link<T, U>;
+    fn get_right(&self) -> Link;
 
-    fn set_right(&self, new_right: Link<T, U>);
+    fn set_right(&self, new_right: Link);
 
-    fn is_left_child(&self, child: Link<T, U>) -> bool;
+    fn is_left_child(&self, child: Link) -> bool;
 
-    fn is_right_child(&self, child: Link<T, U>) -> bool;
+    fn is_right_child(&self, child: Link) -> bool;
 
-    fn is_parent(&self, child: Link<T, U>) -> bool;
+    fn is_parent(&self, child: Link) -> bool;
 
     fn is_heap_invariant(&self) -> bool;
 
-    fn search(&self, key: &T) -> bool;
+    fn search(&self, key: &Vec<u8>) -> bool;
 }
 
-impl<T, U> std::fmt::Debug for Node<T, U>
-where
-    T: PartialOrd + Debug,
-    U: PartialOrd + Debug,
-{
+impl std::fmt::Debug for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Node")
             .field("key", &self.key)
@@ -62,48 +54,44 @@ where
     }
 }
 
-impl<T, U> NodeStuff<T, U> for Rc<RefCell<Node<T, U>>>
-where
-    T: PartialOrd + Debug,
-    U: PartialOrd + Debug,
-{
-    fn get_parent(&self) -> Link<T, U> {
+impl NodeStuff for Rc<RefCell<Node>> {
+    fn get_parent(&self) -> Link {
         if matches!(self.borrow().parent, None) {
             return None;
         }
         return Some(self.borrow_mut().parent.as_mut().unwrap().clone());
     }
 
-    fn set_parent(&self, parent: Link<T, U>) {
+    fn set_parent(&self, parent: Link) {
         let node = self.clone();
         node.borrow_mut().parent = parent;
     }
 
-    fn get_left(&self) -> Link<T, U> {
+    fn get_left(&self) -> Link {
         if matches!(self.borrow().left, None) {
             return None;
         }
         return Some(self.borrow_mut().left.as_mut().unwrap().clone());
     }
 
-    fn set_left(&self, new_left: Link<T, U>) {
+    fn set_left(&self, new_left: Link) {
         let node = self.clone();
         node.borrow_mut().left = new_left;
     }
 
-    fn get_right(&self) -> Link<T, U> {
+    fn get_right(&self) -> Link {
         if matches!(self.borrow().right, None) {
             return None;
         }
         return Some(self.borrow_mut().right.as_mut().unwrap().clone());
     }
 
-    fn set_right(&self, new_right: Link<T, U>) {
+    fn set_right(&self, new_right: Link) {
         let node = self.clone();
         node.borrow_mut().right = new_right;
     }
 
-    fn is_left_child(&self, child: Link<T, U>) -> bool {
+    fn is_left_child(&self, child: Link) -> bool {
         if matches!(self.borrow().left, None) {
             return matches!(child, None);
         }
@@ -116,7 +104,7 @@ where
         return Rc::ptr_eq(&my_child, &child.unwrap());
     }
 
-    fn is_right_child(&self, child: Link<T, U>) -> bool {
+    fn is_right_child(&self, child: Link) -> bool {
         if matches!(self.borrow().right, None) {
             return matches!(child, None);
         }
@@ -129,7 +117,7 @@ where
         return Rc::ptr_eq(&my_child, &child.unwrap());
     }
 
-    fn is_parent(&self, parent: Link<T, U>) -> bool {
+    fn is_parent(&self, parent: Link) -> bool {
         if matches!(self.borrow().parent, None) {
             return matches!(parent, None);
         }
@@ -140,11 +128,7 @@ where
         return Rc::ptr_eq(&my_parent, &parent.unwrap());
     }
 
-    fn is_heap_invariant(&self) -> bool
-    where
-        T: PartialOrd + Debug,
-        U: PartialOrd + Debug,
-    {
+    fn is_heap_invariant(&self) -> bool {
         let parent_link = self.get_parent();
 
         if matches!(parent_link, None) {
@@ -155,7 +139,7 @@ where
         return self.borrow().priority > parent.borrow().priority;
     }
 
-    fn search(&self, key: &T) -> bool {
+    fn search(&self, key: &Vec<u8>) -> bool {
         if self.borrow().key == *key {
             return true;
         }
@@ -175,23 +159,19 @@ where
 }
 
 #[derive(Debug)]
-pub struct Memtable<T: PartialOrd + Debug, U: PartialOrd + Debug> {
-    root: Link<T, U>,
+pub struct Memtable {
+    root: Link,
 }
 
 /**
  * this is the real implementation
  */
-impl<T, U> Memtable<T, U>
-where
-    T: PartialOrd + Debug,
-    U: PartialOrd + Debug,
-{
+impl Memtable {
     pub fn new() -> Self {
         Memtable { root: None }
     }
 
-    pub fn search(&mut self, key: &T) -> bool {
+    pub fn search(&mut self, key: &Vec<u8>) -> bool {
         if matches!(self.root, None) {
             return false;
         }
@@ -200,7 +180,7 @@ where
         return node.search(key);
     }
 
-    pub fn insert(&mut self, key: T, priority: U) {
+    pub fn insert(&mut self, key: Vec<u8>, priority: f64) {
         let new_node = Rc::new(RefCell::new(Node {
             key,
             priority,
@@ -216,8 +196,8 @@ where
         }
 
         // find the parent of the node we're going to insert
-        let mut node_link: Link<T, U> = Some(self.root.as_ref().unwrap().clone());
-        let mut parent_link: Link<T, U> = None;
+        let mut node_link: Link = Some(self.root.as_ref().unwrap().clone());
+        let mut parent_link: Link = None;
 
         while !matches!(node_link, None) {
             let node = node_link.as_ref().unwrap().clone();
@@ -248,7 +228,7 @@ where
         }
     }
 
-    fn rotate_left(&mut self, x: &mut Rc<RefCell<Node<T, U>>>) {
+    fn rotate_left(&mut self, x: &mut Rc<RefCell<Node>>) {
         if matches!(x.get_parent(), None) {
             panic!("cannot rorate root of tree");
         }
@@ -281,7 +261,7 @@ where
         y.set_parent(Some(x.clone()));
     }
 
-    fn rotate_right(&mut self, x: &mut Rc<RefCell<Node<T, U>>>) {
+    fn rotate_right(&mut self, x: &mut Rc<RefCell<Node>>) {
         if matches!(x.get_parent(), None) {
             panic!("cannot rotate the root of the tree");
         }
@@ -316,6 +296,7 @@ where
     }
 }
 
+/*
 #[cfg(test)]
 mod search_tests {
     use super::*;
@@ -804,38 +785,34 @@ mod rotate_right_tests {
         assert_eq!(true, x_right.is_parent(Some(y.clone())));
     }
 }
-
+*/
 #[derive(Debug)]
-pub struct MemtableIterator<T: PartialOrd, U: PartialOrd> {
-    unvisited: Vec<Link<T, U>>,
+pub struct MemtableIterator {
+    unvisited: Vec<Link>,
 }
 
-impl<T, U> MemtableIterator<T, U>
-where
-    T: PartialOrd + Debug,
-    U: PartialOrd + Debug,
-{
-    fn push_left_edge(&mut self, tree: &Memtable<T, U>) {
+impl MemtableIterator {
+    fn push_left_edge(&mut self, tree: &Memtable) {
         if matches!(tree.root, None) {
             return;
         }
         let mut link = Some(tree.root.as_ref().unwrap().clone());
-        while matches!(link, None) {
+        println!("link === {:?}", link);
+        while !matches!(link, None) {
+            println!("link 2 === {:?}", link);
             let node = link.as_ref().unwrap();
             self.unvisited.push(Some(node.clone()));
+            println!("self == {:?}", self);
             link = node.get_left();
         }
     }
 }
 
-impl<T, U> Iterator for MemtableIterator<T, U>
-where
-    T: PartialOrd + Clone + Debug,
-    U: PartialOrd + Debug + Clone,
-{
-    type Item = T;
+impl Iterator for MemtableIterator {
+    type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        println!("next {:?}", self);
         let link = self.unvisited.pop()?;
 
         let node = link.as_ref().unwrap();
@@ -846,24 +823,16 @@ where
     }
 }
 
-impl<T, U> IntoIterator for Memtable<T, U>
-where
-    T: PartialOrd + Clone + Debug,
-    U: PartialOrd + Debug + Clone,
-{
-    type Item = T;
-    type IntoIter = MemtableIterator<T, U>;
+impl IntoIterator for Memtable {
+    type Item = Vec<u8>;
+    type IntoIter = MemtableIterator;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
-impl<T, U> Memtable<T, U>
-where
-    T: PartialOrd + Clone + Debug,
-    U: PartialOrd + Debug + Clone,
-{
-    fn iter(&self) -> MemtableIterator<T, U> {
+impl Memtable {
+    pub fn iter(&self) -> MemtableIterator {
         let mut iter = MemtableIterator {
             unvisited: Vec::new(),
         };
