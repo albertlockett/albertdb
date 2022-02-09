@@ -1,3 +1,4 @@
+use rand::prelude::*;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
@@ -161,6 +162,8 @@ impl NodeStuff for Rc<RefCell<Node>> {
 #[derive(Debug)]
 pub struct Memtable {
     root: Link,
+    size: u32,
+    id: f64,
 }
 
 /**
@@ -168,7 +171,18 @@ pub struct Memtable {
  */
 impl Memtable {
     pub fn new() -> Self {
-        Memtable { root: None }
+        println!("making new memtable");
+        let mut rng = rand::thread_rng();
+        let y: f64 = rng.gen();
+        Memtable {
+            id: y,
+            root: None,
+            size: 0,
+        }
+    }
+
+    pub fn size(&self) -> u32 {
+        return self.size;
     }
 
     pub fn search(&mut self, key: &Vec<u8>) -> bool {
@@ -191,6 +205,7 @@ impl Memtable {
 
         // oops the tree is empty - new node is the root
         if matches!(self.root, None) {
+            println!("seting root!!");
             self.root = Some(new_node);
             return;
         }
@@ -226,6 +241,8 @@ impl Memtable {
                 self.rotate_left(&mut new_node.clone());
             }
         }
+
+        self.size += 1;
     }
 
     fn rotate_left(&mut self, x: &mut Rc<RefCell<Node>>) {
@@ -816,9 +833,7 @@ impl Iterator for MemtableIterator {
         let link = self.unvisited.pop()?;
 
         let node = link.as_ref().unwrap();
-        self.push_left_edge(&Memtable {
-            root: node.get_left(),
-        });
+        self.push_left_edge(&Memtable::new());
         return Some(node.borrow().key.clone());
     }
 }
