@@ -1,7 +1,10 @@
 use rand::prelude::*;
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::RwLock;
+
+pub mod memtable2;
 
 pub struct Node {
     key: Vec<u8>,
@@ -11,7 +14,7 @@ pub struct Node {
     parent: Link,
 }
 
-pub type Link = Option<Rc<RefCell<Node>>>;
+pub type Link = Option<Arc<RwLock<Node>>>;
 
 pub trait NodeStuff {
     fn get_parent(&self) -> Link;
@@ -55,78 +58,78 @@ impl std::fmt::Debug for Node {
     }
 }
 
-impl NodeStuff for Rc<RefCell<Node>> {
+impl NodeStuff for Arc<RwLock<Node>> {
     fn get_parent(&self) -> Link {
-        if matches!(self.borrow().parent, None) {
+        if matches!(self.read().unwrap().parent, None) {
             return None;
         }
-        return Some(self.borrow_mut().parent.as_mut().unwrap().clone());
+        return Some(self.write().unwrap().parent.as_mut().unwrap().clone());
     }
 
     fn set_parent(&self, parent: Link) {
         let node = self.clone();
-        node.borrow_mut().parent = parent;
+        node.write().unwrap().parent = parent;
     }
 
     fn get_left(&self) -> Link {
-        if matches!(self.borrow().left, None) {
+        if matches!(self.read().unwrap().left, None) {
             return None;
         }
-        return Some(self.borrow_mut().left.as_mut().unwrap().clone());
+        return Some(self.write().unwrap().left.as_mut().unwrap().clone());
     }
 
     fn set_left(&self, new_left: Link) {
         let node = self.clone();
-        node.borrow_mut().left = new_left;
+        node.write().unwrap().left = new_left;
     }
 
     fn get_right(&self) -> Link {
-        if matches!(self.borrow().right, None) {
+        if matches!(self.read().unwrap().right, None) {
             return None;
         }
-        return Some(self.borrow_mut().right.as_mut().unwrap().clone());
+        return Some(self.write().unwrap().right.as_mut().unwrap().clone());
     }
 
     fn set_right(&self, new_right: Link) {
         let node = self.clone();
-        node.borrow_mut().right = new_right;
+        node.write().unwrap().right = new_right;
     }
 
     fn is_left_child(&self, child: Link) -> bool {
-        if matches!(self.borrow().left, None) {
+        if matches!(self.read().unwrap().left, None) {
             return matches!(child, None);
         }
 
         if matches!(child, None) {
-            return matches!(self.borrow().left, None);
+            return matches!(self.read().unwrap().left, None);
         }
 
-        let my_child = self.borrow().left.as_ref().unwrap().clone();
-        return Rc::ptr_eq(&my_child, &child.unwrap());
+        let my_child = self.read().unwrap().left.as_ref().unwrap().clone();
+        return Arc::ptr_eq(&my_child, &child.unwrap());
     }
 
     fn is_right_child(&self, child: Link) -> bool {
-        if matches!(self.borrow().right, None) {
+        if matches!(self.read().unwrap().right, None) {
             return matches!(child, None);
         }
 
         if matches!(child, None) {
-            return matches!(self.borrow().right, None);
+            return matches!(self.read().unwrap().right, None);
         }
 
-        let my_child = self.borrow().right.as_ref().unwrap().clone();
-        return Rc::ptr_eq(&my_child, &child.unwrap());
+        let my_child = self.read().unwrap().right.as_ref().unwrap().clone();
+        return Arc::ptr_eq(&my_child, &child.unwrap());
     }
 
     fn is_parent(&self, parent: Link) -> bool {
-        if matches!(self.borrow().parent, None) {
+        if matches!(self.read().unwrap().parent, None) {
             return matches!(parent, None);
         }
         if matches!(parent, None) {
-            return matches!(self.borrow().parent, None);
+            return matches!(self.read().unwrap().parent, None);
         }
-        let my_parent = self.borrow().parent.as_ref().unwrap().clone();
-        return Rc::ptr_eq(&my_parent, &parent.unwrap());
+        let my_parent = self.read().unwrap().parent.as_ref().unwrap().clone();
+        return Arc::ptr_eq(&my_parent, &parent.unwrap());
     }
 
     fn is_heap_invariant(&self) -> bool {
@@ -137,21 +140,21 @@ impl NodeStuff for Rc<RefCell<Node>> {
         }
 
         let parent = parent_link.as_ref().unwrap();
-        return self.borrow().priority > parent.borrow().priority;
+        return self.read().unwrap().priority > parent.read().unwrap().priority;
     }
 
     fn search(&self, key: &Vec<u8>) -> bool {
-        if self.borrow().key == *key {
+        if self.read().unwrap().key == *key {
             return true;
         }
 
         let has_left = !matches!(self.get_left(), None);
-        if has_left && *key < self.borrow().key {
+        if has_left && *key < self.read().unwrap().key {
             return self.get_left().unwrap().search(key);
         }
 
         let has_right = !matches!(self.get_right(), None);
-        if has_right && *key > self.borrow().key {
+        if has_right && *key > self.read().unwrap().key {
             return self.get_right().unwrap().search(key);
         }
 
@@ -195,7 +198,7 @@ impl Memtable {
     }
 
     pub fn insert(&mut self, key: Vec<u8>, priority: f64) {
-        let new_node = Rc::new(RefCell::new(Node {
+        let new_node = Arc::new(RwLock::new(Node {
             key,
             priority,
             left: None,
@@ -217,7 +220,7 @@ impl Memtable {
         while !matches!(node_link, None) {
             let node = node_link.as_ref().unwrap().clone();
             parent_link = Some(node.clone());
-            if new_node.borrow().key > node.borrow().key {
+            if new_node.read().unwrap().key > node.read().unwrap().key {
                 node_link = node.get_right();
             } else {
                 node_link = node.get_left();
@@ -225,7 +228,7 @@ impl Memtable {
         }
 
         let parent = parent_link.as_ref().unwrap().clone();
-        if parent.borrow().key <= new_node.borrow().key {
+        if parent.read().unwrap().key <= new_node.read().unwrap().key {
             parent.set_right(Some(new_node.clone()))
         } else {
             parent.set_left(Some(new_node.clone()));
@@ -245,7 +248,7 @@ impl Memtable {
         self.size += 1;
     }
 
-    fn rotate_left(&mut self, x: &mut Rc<RefCell<Node>>) {
+    fn rotate_left(&mut self, x: &mut Arc<RwLock<Node>>) {
         if matches!(x.get_parent(), None) {
             panic!("cannot rorate root of tree");
         }
@@ -278,7 +281,7 @@ impl Memtable {
         y.set_parent(Some(x.clone()));
     }
 
-    fn rotate_right(&mut self, x: &mut Rc<RefCell<Node>>) {
+    fn rotate_right(&mut self, x: &mut Arc<RwLock<Node>>) {
         if matches!(x.get_parent(), None) {
             panic!("cannot rotate the root of the tree");
         }
@@ -363,21 +366,21 @@ mod insert_tests {
     #[test]
     fn test_insert_some_rotations() {
         let mut m = Memtable::<u32, u32> { root: None };
-        let p = Rc::new(RefCell::new(Node {
+        let p = Arc::new(RefCell::new(Node {
             key: 50,
             priority: 50,
             left: None,
             right: None,
             parent: None,
         }));
-        let y = Rc::new(RefCell::new(Node {
+        let y = Arc::new(RefCell::new(Node {
             key: 40,
             priority: 40,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Rc::new(RefCell::new(Node {
+        let x = Arc::new(RefCell::new(Node {
             key: 30,
             priority: 30,
             left: None,
@@ -395,10 +398,10 @@ mod insert_tests {
 
         m.insert(35, 45);
 
-        assert_eq!(true, Rc::ptr_eq(&p, m.root.as_ref().unwrap()));
+        assert_eq!(true, Arc::ptr_eq(&p, m.root.as_ref().unwrap()));
 
         let new_node = p.get_left().unwrap().clone();
-        assert_eq!(35, new_node.borrow().key);
+        assert_eq!(35, new_node.read().unwrap().key);
 
         assert_eq!(true, new_node.is_left_child(Some(x.clone())));
         assert_eq!(true, x.is_parent(Some(new_node.clone())));
@@ -415,28 +418,28 @@ mod rotate_left_tests {
     #[test]
     fn test_rotate_left_full_rotation() {
         let mut m = Memtable::<i32, i32>::new();
-        let p = Rc::new(RefCell::new(Node::<i32, i32> {
+        let p = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 0,
             priority: 0,
             left: None,
             right: None,
             parent: None,
         }));
-        let y = Rc::new(RefCell::new(Node::<i32, i32> {
+        let y = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 1,
             priority: 0,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 2,
             priority: 0,
             left: None,
             right: None,
             parent: None,
         }));
-        let x_left = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x_left = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 3,
             priority: 0,
             left: None,
@@ -478,28 +481,28 @@ mod rotate_left_tests {
     #[test]
     fn test_rotate_left_full_y_is_left_child_of_p() {
         let mut m = Memtable::<i32, i32>::new();
-        let p = Rc::new(RefCell::new(Node::<i32, i32> {
+        let p = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 0,
             priority: 0,
             left: None,
             right: None,
             parent: None,
         }));
-        let y = Rc::new(RefCell::new(Node::<i32, i32> {
+        let y = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 1,
             priority: 0,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 2,
             priority: 0,
             left: None,
             right: None,
             parent: None,
         }));
-        let x_left = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x_left = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 3,
             priority: 0,
             left: None,
@@ -541,7 +544,7 @@ mod rotate_left_tests {
     #[test]
     fn test_rotate_left_parent_is_root() {
         let mut m = Memtable::<i32, i32>::new();
-        let p = Rc::new(RefCell::new(Node::<i32, i32> {
+        let p = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 0,
             priority: 0,
             left: None,
@@ -549,7 +552,7 @@ mod rotate_left_tests {
             parent: None,
         }));
 
-        let x = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 2,
             priority: 0,
             left: None,
@@ -563,7 +566,7 @@ mod rotate_left_tests {
 
         m.rotate_left(&mut x.clone());
 
-        assert_eq!(true, Rc::ptr_eq(&x, m.root.as_ref().unwrap()));
+        assert_eq!(true, Arc::ptr_eq(&x, m.root.as_ref().unwrap()));
         assert_eq!(true, matches!(x.get_parent(), None));
 
         assert_eq!(true, x.is_left_child(Some(p.clone())));
@@ -576,7 +579,7 @@ mod rotate_left_tests {
     #[should_panic]
     fn test_rotate_left_panics_if_x_is_root() {
         let mut m = Memtable::<i32, i32>::new();
-        let x = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 0,
             priority: 0,
             left: None,
@@ -591,7 +594,7 @@ mod rotate_left_tests {
     #[should_panic]
     fn test_rotate_left_panics_if_x_is_left_child() {
         let mut m = Memtable::<i32, i32>::new();
-        let p = Rc::new(RefCell::new(Node::<i32, i32> {
+        let p = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 0,
             priority: 0,
             left: None,
@@ -599,7 +602,7 @@ mod rotate_left_tests {
             parent: None,
         }));
 
-        let x = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 2,
             priority: 0,
             left: None,
@@ -622,7 +625,7 @@ mod rotate_right_tests {
     #[should_panic]
     fn panics_if_x_is_root() {
         let mut m = Memtable::<i32, i32>::new();
-        let x = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 0,
             priority: 0,
             left: None,
@@ -637,14 +640,14 @@ mod rotate_right_tests {
     #[should_panic]
     fn panics_if_x_is_right_child() {
         let mut m = Memtable::<i32, i32>::new();
-        let p = Rc::new(RefCell::new(Node::<i32, i32> {
+        let p = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 0,
             priority: 0,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 1,
             priority: 2,
             left: None,
@@ -662,14 +665,14 @@ mod rotate_right_tests {
     #[test]
     fn handles_case_where_x_parent_is_root() {
         let mut m = Memtable::<i32, i32>::new();
-        let p = Rc::new(RefCell::new(Node::<i32, i32> {
+        let p = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 0,
             priority: 0,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 1,
             priority: 2,
             left: None,
@@ -683,7 +686,7 @@ mod rotate_right_tests {
 
         m.rotate_right(&mut x.clone());
 
-        assert_eq!(true, Rc::ptr_eq(&x, m.root.as_ref().unwrap()));
+        assert_eq!(true, Arc::ptr_eq(&x, m.root.as_ref().unwrap()));
         assert_eq!(true, matches!(x.get_parent(), None));
 
         assert_eq!(true, x.is_right_child(Some(p.clone())));
@@ -695,28 +698,28 @@ mod rotate_right_tests {
     #[test]
     fn full_rotate_y_is_p_right_child() {
         let mut m = Memtable::<i32, i32>::new();
-        let p = Rc::new(RefCell::new(Node::<i32, i32> {
+        let p = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 0,
             priority: 0,
             left: None,
             right: None,
             parent: None,
         }));
-        let y = Rc::new(RefCell::new(Node::<i32, i32> {
+        let y = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 1,
             priority: 1,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 2,
             priority: 2,
             left: None,
             right: None,
             parent: None,
         }));
-        let x_right = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x_right = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 3,
             priority: 3,
             left: None,
@@ -750,28 +753,28 @@ mod rotate_right_tests {
     #[test]
     fn full_rotate_y_is_p_left_child() {
         let mut m = Memtable::<i32, i32>::new();
-        let p = Rc::new(RefCell::new(Node::<i32, i32> {
+        let p = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 0,
             priority: 0,
             left: None,
             right: None,
             parent: None,
         }));
-        let y = Rc::new(RefCell::new(Node::<i32, i32> {
+        let y = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 1,
             priority: 1,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 2,
             priority: 2,
             left: None,
             right: None,
             parent: None,
         }));
-        let x_right = Rc::new(RefCell::new(Node::<i32, i32> {
+        let x_right = Arc::new(RefCell::new(Node::<i32, i32> {
             key: 3,
             priority: 3,
             left: None,
@@ -834,7 +837,7 @@ impl Iterator for MemtableIterator {
 
         let node = link.as_ref().unwrap();
         self.push_left_edge(&Memtable::new());
-        return Some(node.borrow().key.clone());
+        return Some(node.read().unwrap().key.clone());
     }
 }
 
