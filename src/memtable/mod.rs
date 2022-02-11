@@ -188,7 +188,7 @@ impl Memtable {
         return self.size;
     }
 
-    pub fn search(&mut self, key: &Vec<u8>) -> bool {
+    pub fn search(&self, key: &Vec<u8>) -> bool {
         if matches!(self.root, None) {
             return false;
         }
