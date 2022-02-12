@@ -1,13 +1,28 @@
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::thread;
+
 use crate::memtable;
+use crate::sstable;
 
 pub struct Engine {
+    _handle: std::thread::JoinHandle<()>,
+    sender: Mutex<mpsc::Sender<Arc<memtable::Memtable>>>,
     writable_table: memtable::Memtable,
-    flushing_memtables: Vec<memtable::Memtable>,
+    flushing_memtables: Vec<Arc<memtable::Memtable>>,
 }
 
 impl Engine {
     pub fn new() -> Self {
+        let (sender, receiver) = mpsc::channel::<Arc<memtable::Memtable>>();
+        let _handle = thread::spawn(move || while let Ok(value) = receiver.recv() {
+            println!("flushing memtable!!");
+            sstable::flush_to_sstable(&value).unwrap();
+        });
         Engine {
+            _handle,
+            sender: Mutex::new(sender),
             writable_table: memtable::Memtable::new(),
             flushing_memtables: vec![],
         }
@@ -19,7 +34,12 @@ impl Engine {
         if self.writable_table.size() > 3 {
             let mut tmp = memtable::Memtable::new();
             std::mem::swap(&mut self.writable_table, &mut tmp);
-            self.flushing_memtables.push(tmp);
+
+            let mt_pointer = Arc::new(tmp);
+            self.flushing_memtables.push(mt_pointer.clone());
+            let sender = self.sender.lock().unwrap();
+            let flush_result = sender.send(mt_pointer.clone());
+            println!("flush send result = {:?}", flush_result);
         }
     }
 

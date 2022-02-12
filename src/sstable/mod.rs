@@ -35,6 +35,7 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
         .open(path)?;
 
     for entry in entries {
+        println!("{:?}", entry);
         file.write(&[entry.flags])?;
         let key_length = [
             (entry.key_length >> 24) as u8,
