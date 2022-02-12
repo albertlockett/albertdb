@@ -23,19 +23,19 @@ impl Engine {
         }
     }
 
-    pub fn find(&self, key: &[u8]) -> bool {
+    pub fn find(&self, key: &[u8]) -> Option<Vec<u8>> {
         let found = self.writable_table.search(key);
-        if found {
+        if found.is_some() {
             return found;
         };
 
         for mt in &self.flushing_memtables {
             let found = mt.search(&key);
-            if found {
+            if found.is_some() {
                 return found;
             }
         }
 
-        return false;
+        return None;
     }
 }

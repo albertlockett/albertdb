@@ -35,7 +35,7 @@ pub trait NodeStuff {
 
     fn is_heap_invariant(&self) -> bool;
 
-    fn search(&self, key: &Vec<u8>) -> bool;
+    fn search(&self, key: &Vec<u8>) -> Option<Vec<u8>>;
 }
 
 impl std::fmt::Debug for Node {
@@ -141,9 +141,9 @@ impl NodeStuff for Arc<RwLock<Node>> {
         return self.read().unwrap().priority > parent.read().unwrap().priority;
     }
 
-    fn search(&self, key: &Vec<u8>) -> bool {
+    fn search(&self, key: &Vec<u8>) -> Option<Vec<u8>> {
         if self.read().unwrap().key == *key {
-            return true;
+            return Some(self.read().unwrap().value.clone());
         }
 
         let has_left = !matches!(self.get_left(), None);
@@ -156,7 +156,7 @@ impl NodeStuff for Arc<RwLock<Node>> {
             return self.get_right().unwrap().search(key);
         }
 
-        return false;
+        return None;
     }
 }
 
@@ -185,14 +185,17 @@ impl Memtable {
         return self.size;
     }
 
-    pub fn search(&self, key: &[u8]) -> bool {
+    pub fn search(&self, key: &[u8]) -> Option<Vec<u8>> {
         if matches!(self.root, None) {
-            return false;
+            return None;
         }
 
-        let node = self.root.as_ref().unwrap().clone();
-        // TODO don't clone the key here
-        return node.search(&key.to_vec());
+        let node = self.root.as_ref().unwrap();
+        let value = node.search(&key.to_vec());
+        if value.is_some() {
+            return Some(value.unwrap());
+        }
+        return None;
     }
 
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
