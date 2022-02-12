@@ -28,7 +28,8 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
         })
         .collect();
 
-    let path = path::Path::new("/tmp/sstable1");
+    let filename = format!("/tmp/sstable-{}", memtable.id);
+    let path = path::Path::new(&filename);
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)

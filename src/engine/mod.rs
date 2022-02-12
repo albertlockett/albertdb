@@ -20,7 +20,7 @@ impl Engine {
         let (sender, receiver) = mpsc::channel::<Arc<memtable::Memtable>>();
         let _handle = thread::spawn(move || {
             while let Ok(value) = receiver.recv() {
-                println!("flushing memtable!!");
+                println!("flushing memtable receiver");
                 sstable::flush_to_sstable(&value).unwrap();
             }
         });
@@ -36,7 +36,7 @@ impl Engine {
     }
 
     pub fn write(&mut self, key: &[u8], value: &[u8]) {
-        self.writable_wal.write().unwrap();
+        self.writable_wal.write(key, value).unwrap();
         self.writable_table.insert(key.to_vec(), value.to_vec());
 
         if self.writable_table.size() > 3 {
@@ -45,7 +45,7 @@ impl Engine {
             std::mem::swap(&mut self.writable_table, &mut tmp);
             std::mem::swap(&mut self.writable_wal, &mut new_wal);
 
-            println!("flushing a bitch {:?}", tmp);
+            println!("flushing a memtable {:?}", tmp);
             let mt_pointer = Arc::new(tmp);
             self.flushing_memtables.push(mt_pointer.clone());
             let sender = self.sender.lock().unwrap();
