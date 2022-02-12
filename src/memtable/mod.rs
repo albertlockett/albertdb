@@ -815,17 +815,14 @@ pub struct MemtableIterator {
 }
 
 impl MemtableIterator {
-    fn push_left_edge(&mut self, tree: &Memtable) {
-        if matches!(tree.root, None) {
+    fn push_left_edge(&mut self, link: &Link) {
+        if matches!(link, None) {
             return;
         }
-        let mut link = Some(tree.root.as_ref().unwrap().clone());
-        println!("link === {:?}", link);
+        let mut link = Some(link.as_ref().unwrap().clone());
         while !matches!(link, None) {
-            println!("link 2 === {:?}", link);
             let node = link.as_ref().unwrap();
             self.unvisited.push(Some(node.clone()));
-            println!("self == {:?}", self);
             link = node.get_left();
         }
     }
@@ -835,11 +832,10 @@ impl Iterator for MemtableIterator {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        println!("next {:?}", self);
         let link = self.unvisited.pop()?;
 
         let node = link.as_ref().unwrap();
-        self.push_left_edge(&Memtable::new());
+        self.push_left_edge(&node.get_right());
         return Some(node.read().unwrap().key.clone());
     }
 }
@@ -857,7 +853,7 @@ impl Memtable {
         let mut iter = MemtableIterator {
             unvisited: Vec::new(),
         };
-        iter.push_left_edge(self);
+        iter.push_left_edge(&self.root);
         iter
     }
 }

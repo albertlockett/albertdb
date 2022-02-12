@@ -35,6 +35,7 @@ impl Engine {
             let mut tmp = memtable::Memtable::new();
             std::mem::swap(&mut self.writable_table, &mut tmp);
 
+            println!("flushing a bitch {:?}", tmp);
             let mt_pointer = Arc::new(tmp);
             self.flushing_memtables.push(mt_pointer.clone());
             let sender = self.sender.lock().unwrap();
