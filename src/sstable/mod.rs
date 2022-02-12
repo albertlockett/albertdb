@@ -92,8 +92,8 @@ mod flush_to_sstable_tests {
     #[test]
     fn smoke_test() {
         let mut m = memtable::Memtable::new();
-        m.insert("abc".bytes().collect(), 2.0);
-        m.insert("def".bytes().collect(), 3.0);
+        m.insert("abc".bytes().collect(), "abc".bytes().collect());
+        m.insert("def".bytes().collect(), "dev".bytes().collect());
         let result = flush_to_sstable(&m);
         println!("{:?} {:?}", m, result);
     }

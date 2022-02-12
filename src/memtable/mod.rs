@@ -1,13 +1,11 @@
 use rand::prelude::*;
-use std::cell::RefCell;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-pub mod memtable2;
-
 pub struct Node {
     key: Vec<u8>,
+    value: Vec<u8>,
     priority: f64,
     left: Link,
     right: Link,
@@ -174,7 +172,6 @@ pub struct Memtable {
  */
 impl Memtable {
     pub fn new() -> Self {
-        println!("making new memtable");
         let mut rng = rand::thread_rng();
         let y: f64 = rng.gen();
         Memtable {
@@ -188,18 +185,24 @@ impl Memtable {
         return self.size;
     }
 
-    pub fn search(&self, key: &Vec<u8>) -> bool {
+    pub fn search(&self, key: &[u8]) -> bool {
         if matches!(self.root, None) {
             return false;
         }
 
         let node = self.root.as_ref().unwrap().clone();
-        return node.search(key);
+        // TODO don't clone the key here
+        return node.search(&key.to_vec());
     }
 
-    pub fn insert(&mut self, key: Vec<u8>, priority: f64) {
+    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
+        self.size += 1;
+
+        let mut rng = rand::thread_rng();
+        let priority: f64 = rng.gen();
         let new_node = Arc::new(RwLock::new(Node {
             key,
+            value,
             priority,
             left: None,
             right: None,
@@ -208,7 +211,6 @@ impl Memtable {
 
         // oops the tree is empty - new node is the root
         if matches!(self.root, None) {
-            println!("seting root!!");
             self.root = Some(new_node);
             return;
         }
@@ -244,8 +246,6 @@ impl Memtable {
                 self.rotate_left(&mut new_node.clone());
             }
         }
-
-        self.size += 1;
     }
 
     fn rotate_left(&mut self, x: &mut Arc<RwLock<Node>>) {
