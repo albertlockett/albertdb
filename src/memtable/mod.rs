@@ -164,7 +164,7 @@ impl NodeStuff for Arc<RwLock<Node>> {
 pub struct Memtable {
     root: Link,
     size: u32,
-    id: f64,
+    pub id: String,
 }
 
 /**
@@ -172,10 +172,11 @@ pub struct Memtable {
  */
 impl Memtable {
     pub fn new() -> Self {
+        // TODO needs a better implementation of random ID
         let mut rng = rand::thread_rng();
-        let y: f64 = rng.gen();
+        let id: u32 = rng.gen();
         Memtable {
-            id: y,
+            id: format!("{:?}", id),
             root: None,
             size: 0,
         }

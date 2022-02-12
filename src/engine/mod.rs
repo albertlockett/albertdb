@@ -5,35 +5,45 @@ use std::thread;
 
 use crate::memtable;
 use crate::sstable;
+use crate::wal;
 
 pub struct Engine {
     _handle: std::thread::JoinHandle<()>,
     sender: Mutex<mpsc::Sender<Arc<memtable::Memtable>>>,
     writable_table: memtable::Memtable,
+    writable_wal: wal::Wal,
     flushing_memtables: Vec<Arc<memtable::Memtable>>,
 }
 
 impl Engine {
     pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel::<Arc<memtable::Memtable>>();
-        let _handle = thread::spawn(move || while let Ok(value) = receiver.recv() {
-            println!("flushing memtable!!");
-            sstable::flush_to_sstable(&value).unwrap();
+        let _handle = thread::spawn(move || {
+            while let Ok(value) = receiver.recv() {
+                println!("flushing memtable!!");
+                sstable::flush_to_sstable(&value).unwrap();
+            }
         });
+        let memtable = memtable::Memtable::new();
+        let wal = wal::Wal::new(memtable.id.clone());
         Engine {
             _handle,
             sender: Mutex::new(sender),
-            writable_table: memtable::Memtable::new(),
+            writable_table: memtable,
+            writable_wal: wal,
             flushing_memtables: vec![],
         }
     }
 
     pub fn write(&mut self, key: &[u8], value: &[u8]) {
+        self.writable_wal.write().unwrap();
         self.writable_table.insert(key.to_vec(), value.to_vec());
 
         if self.writable_table.size() > 3 {
             let mut tmp = memtable::Memtable::new();
+            let mut new_wal = wal::Wal::new(tmp.id.clone());
             std::mem::swap(&mut self.writable_table, &mut tmp);
+            std::mem::swap(&mut self.writable_wal, &mut new_wal);
 
             println!("flushing a bitch {:?}", tmp);
             let mt_pointer = Arc::new(tmp);
