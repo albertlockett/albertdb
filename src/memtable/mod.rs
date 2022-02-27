@@ -241,7 +241,6 @@ impl Memtable {
         }
         new_node.set_parent(Some(parent.clone()));
 
-        println!("checkin heap invariant");
         while new_node.is_heap_invariant() {
             let parent = new_node.get_parent().unwrap();
             if parent.is_left_child(Some(new_node.clone())) {

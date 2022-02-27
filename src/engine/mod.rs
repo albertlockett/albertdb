@@ -56,7 +56,7 @@ impl Engine {
             self.flushing_memtables.push(mt_pointer.clone());
             let sender = self.sender.lock().unwrap();
             let flush_result = sender.send(mt_pointer.clone());
-            
+
             // TODO need to handle this result
             println!("flush send result = {:?}", flush_result);
         }
