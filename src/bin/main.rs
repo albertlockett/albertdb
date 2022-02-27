@@ -1,12 +1,14 @@
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use albertdb::engine::Engine;
+use log::{debug, error, info, log_enabled, Level};
 use serde::Deserialize;
 use std::str;
 use std::sync::{Arc, RwLock};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("hello, world");
+    env_logger::init();
+    info!("starting albertdb with web frontend");
 
     let memtable_mgr = Engine::new();
     let mmt_arc = Arc::new(RwLock::new(memtable_mgr));

@@ -1,9 +1,8 @@
 use crate::memtable;
+use log;
 use std::fs;
 use std::path;
-
 use std::io;
-use std::io::Read;
 use std::io::Write;
 
 pub mod reader;
@@ -21,6 +20,8 @@ struct Entry {
 // TODO
 // - delete the WAL
 pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
+    log::info!("flushing memtable (id: {})", memtable.id);
+
     let iter = memtable.iter();
     let entries: Vec<Entry> = iter
         .map(|(key, value)| {
@@ -68,38 +69,6 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
     return Ok(1);
 }
 
-// fn find_entry(search_key: &Vec<u8>) -> io::Result<Option<Entry>> {
-//     let path = path::Path::new("/tmp/sstable1");
-//     let file = fs::OpenOptions::new().read(true).open(path)?;
-
-//     let mut bytes = file.bytes();
-
-//     loop {
-//         let flags_1_option = bytes.next();
-//         if flags_1_option.is_none() {
-//             return Ok(None);
-//         }
-//         // TODO do something with flags_1
-
-//         let key_length = ((bytes.next().unwrap()? as u32) << 24)
-//             + ((bytes.next().unwrap()? as u32) << 16)
-//             + ((bytes.next().unwrap()? as u32) << 8)
-//             + (bytes.next().unwrap()? as u32);
-
-//         let mut key: Vec<u8> = Vec::with_capacity(key_length as usize);
-//         for _ in 0..key_length {
-//             key.push(bytes.next().unwrap()?);
-//         }
-
-//         if &key == search_key {
-//             return Ok(Some(Entry {
-//                 flags: 0,
-//                 key_length,
-//                 key,
-//             }));
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod flush_to_sstable_tests {
@@ -115,24 +84,3 @@ mod flush_to_sstable_tests {
         println!("{:?} {:?}", m, result);
     }
 }
-
-// #[cfg(test)]
-// mod find_entry_tests {
-//     use super::*;
-//     use crate::memtable;
-
-//     #[test]
-//     fn smoke_test() {
-//         let search_key = "abc".bytes().collect();
-//         let result = find_entry(&search_key);
-//         println!("{:?}", result);
-
-//         let search_key = "def".bytes().collect();
-//         let result = find_entry(&search_key);
-//         println!("{:?}", result);
-
-//         let search_key = "eee".bytes().collect();
-//         let result = find_entry(&search_key);
-//         println!("{:?}", result);
-//     }
-// }

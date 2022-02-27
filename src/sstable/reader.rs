@@ -1,3 +1,4 @@
+use log;
 use std::fs;
 use std::io;
 use std::path;
@@ -24,7 +25,7 @@ impl Reader {
     // - try to ignore half-way flushed sstables
     // - try to ignore files called sstables, that aren't sstables (could do this by checking metadata)
     pub fn init(&mut self) {
-        println!("initializing sstable reader");
+        log::info!("initializing sstable reader");
         let data_dir = "/tmp"; // TODO not have hard coded
         for file in fs::read_dir(data_dir).unwrap() {
             let path: Box<path::Path> = file.unwrap().path().into_boxed_path();
@@ -33,18 +34,21 @@ impl Reader {
             }
         }
 
-        println!("initialized with {} memtables: {:?}", self.sstables.len(), self.sstables);
+        log::info!("initialized with {} memtables", self.sstables.len());
+        log::debug!("memtables: {:?}", self.sstables);
     }
 
     pub fn find(&self, key: &[u8]) -> Option<Vec<u8>> {
         for path in &self.sstables {
+            log::debug!("searching for '{:?}' in '{:?}", key, path);
             let result = find_from_table(key, path);
             match result {
                 Ok(Some(entry)) => {
-                    // TODO return the value from entry
-                    return Some(entry.value)
+                    log::debug!("found '{:?}' in '{:?}", key, path);
+                    return Some(entry.value);
                 }
                 Ok(None) => {
+                    log::debug!("not found '{:?}' in '{:?}", key, path);
                     // skip - could debug log?
                 }
                 Err(err) => {

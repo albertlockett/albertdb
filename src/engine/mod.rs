@@ -1,3 +1,4 @@
+use log;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -21,7 +22,6 @@ impl Engine {
         let (sender, receiver) = mpsc::channel::<Arc<memtable::Memtable>>();
         let _handle = thread::spawn(move || {
             while let Ok(value) = receiver.recv() {
-                println!("flushing memtable receiver");
                 sstable::flush_to_sstable(&value).unwrap();
             }
         });
@@ -44,39 +44,67 @@ impl Engine {
         self.writable_wal.write(key, value).unwrap();
         self.writable_table.insert(key.to_vec(), value.to_vec());
 
+        // TODO memtable size needs to be configurable
         if self.writable_table.size() > 3 {
             let mut tmp = memtable::Memtable::new();
             let mut new_wal = wal::Wal::new(tmp.id.clone());
             std::mem::swap(&mut self.writable_table, &mut tmp);
             std::mem::swap(&mut self.writable_wal, &mut new_wal);
 
-            println!("flushing a memtable {:?}", tmp);
+            log::debug!("sending memtable to flush (id: {:?})", tmp.id);
             let mt_pointer = Arc::new(tmp);
             self.flushing_memtables.push(mt_pointer.clone());
             let sender = self.sender.lock().unwrap();
             let flush_result = sender.send(mt_pointer.clone());
+            
+            // TODO need to handle this result
             println!("flush send result = {:?}", flush_result);
         }
     }
 
     pub fn find(&self, key: &[u8]) -> Option<Vec<u8>> {
+        log::debug!("searching for key {:?}", key);
         let found = self.writable_table.search(key);
         if found.is_some() {
+            if log::log_enabled!(log::Level::Debug) {
+                log::debug!(
+                    "found '{:?}' in writable memtable (id: {}). value: '{:?}'",
+                    key,
+                    self.writable_table.id,
+                    found.as_ref().unwrap()
+                );
+            }
             return found;
         };
 
         for mt in &self.flushing_memtables {
             let found = mt.search(&key);
             if found.is_some() {
+                if log::log_enabled!(log::Level::Debug) {
+                    log::debug!(
+                        "found '{:?}' in flushing memtable (id: {}). value: '{:?}'",
+                        key,
+                        mt.id,
+                        found.as_ref().unwrap()
+                    );
+                }
                 return found;
             }
         }
 
         let disk_result = self.sstable_reader.find(key);
         if disk_result.is_some() {
+            if log::log_enabled!(log::Level::Debug) {
+                log::debug!(
+                    "found '{:?}' in sstable. value: '{:?}'",
+                    key,
+                    disk_result.as_ref().unwrap()
+                );
+            }
             return disk_result;
         }
 
+        log::debug!("key '{:?}' not found", key);
         return None;
     }
 }
