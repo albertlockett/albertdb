@@ -830,19 +830,22 @@ impl MemtableIterator {
 }
 
 impl Iterator for MemtableIterator {
-    type Item = Vec<u8>;
+    type Item = (Vec<u8>, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
         let link = self.unvisited.pop()?;
 
         let node = link.as_ref().unwrap();
         self.push_left_edge(&node.get_right());
-        return Some(node.read().unwrap().key.clone());
+        return Some((
+            node.read().unwrap().key.clone(),
+            node.read().unwrap().value.clone(),
+        ));
     }
 }
 
 impl IntoIterator for Memtable {
-    type Item = Vec<u8>;
+    type Item = (Vec<u8>, Vec<u8>);
     type IntoIter = MemtableIterator;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

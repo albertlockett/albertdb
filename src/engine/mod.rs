@@ -13,6 +13,7 @@ pub struct Engine {
     writable_table: memtable::Memtable,
     writable_wal: wal::Wal,
     flushing_memtables: Vec<Arc<memtable::Memtable>>,
+    sstable_reader: sstable::reader::Reader,
 }
 
 impl Engine {
@@ -26,8 +27,12 @@ impl Engine {
         });
         let memtable = memtable::Memtable::new();
         let wal = wal::Wal::new(memtable.id.clone());
+        let mut sstable_reader = sstable::reader::Reader::new();
+        sstable_reader.init();
+
         Engine {
             _handle,
+            sstable_reader,
             sender: Mutex::new(sender),
             writable_table: memtable,
             writable_wal: wal,
@@ -65,6 +70,11 @@ impl Engine {
             if found.is_some() {
                 return found;
             }
+        }
+
+        let disk_result = self.sstable_reader.find(key);
+        if disk_result.is_some() {
+            return disk_result;
         }
 
         return None;

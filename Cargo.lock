@@ -284,6 +284,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "rand 0.8.4",
+ "regex",
  "serde",
  "serde_json",
 ]
