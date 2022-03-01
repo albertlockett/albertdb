@@ -27,6 +27,18 @@ struct TableMeta {
     timestamp: u128,
 }
 
+impl TableMeta {
+    fn new() -> Self {
+        TableMeta {
+            blocks: vec![],
+            timestamp: time::SystemTime::now()
+                .duration_since(time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 struct BlockMeta {
     count: u32,
@@ -45,13 +57,7 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
         memtable.id,
         memtable.size()
     );
-    let mut table_meta = TableMeta {
-        blocks: vec![],
-        timestamp: time::SystemTime::now()
-            .duration_since(time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
-    };
+    let mut table_meta = TableMeta::new();
 
     let iter = memtable.iter();
     let entries: Vec<Entry> = iter
