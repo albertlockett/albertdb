@@ -19,7 +19,7 @@ pub struct Wal {
 
 impl Wal {
     pub fn new(id: String) -> Self {
-        let filename = format!("/tmp/wal-{}", id);
+        let filename = wal_filename(&id);
         let path = path::Path::new(&filename);
         let file = fs::OpenOptions::new()
             .append(true)
@@ -62,7 +62,7 @@ impl Wal {
     }
 
     pub fn read(&self) -> io::Result<bool> {
-        let filename = format!("/tmp/wal-{}", self.id);
+        let filename = wal_filename(&self.id);
         let path = path::Path::new(&filename);
         let file = fs::OpenOptions::new().read(true).open(path)?;
         let mut bytes = file.bytes();
@@ -71,4 +71,17 @@ impl Wal {
         println!("{:?}", g);
         return Ok(true);
     }
+
+    pub fn delete(&self) -> io::Result<bool> {
+        let filename = wal_filename(&self.id);
+        let path = path::Path::new(&filename);
+        fs::remove_file(path)?;
+        return Ok(true)
+    }
+
+}
+
+fn wal_filename(id: &str) -> String {
+    let filename = format!("/tmp/wal-{}", id);
+    return filename;
 }

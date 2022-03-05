@@ -45,6 +45,10 @@ impl Engine {
                 // flush the memtable
                 sstable::flush_to_sstable(&value).unwrap();
 
+                // delete the WAL
+                let wal = wal::Wal::new(value.id.clone());
+                wal.delete().unwrap(); // TODO could handle this error
+
                 // signal to the reader that there's a new memtable to read
                 let mut reader = sstable_reader_ptr.write().unwrap();
                 reader.add_memtable(&value);
