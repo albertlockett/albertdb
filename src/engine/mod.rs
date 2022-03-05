@@ -9,7 +9,6 @@ use crate::sstable;
 use crate::wal;
 
 pub struct Engine {
-    // _handle: std::thread::JoinHandle<()>,
     flush_sender: Mutex<mpsc::Sender<Arc<memtable::Memtable>>>,
     writable_table: memtable::Memtable,
     writable_wal: wal::Wal,
@@ -18,22 +17,35 @@ pub struct Engine {
 }
 
 impl Engine {
+    // TODO consider whether it's a dumbo thing to do to do all this init stuff in constructor
     pub fn new() -> Self {
+        // TODO handle this error
+        let mut wal_recovery = wal::recover().unwrap();
+
         let (flush_sender, flush_receiver) = mpsc::channel::<Arc<memtable::Memtable>>();
 
-        let memtable = memtable::Memtable::new();
+        let mut memtable = memtable::Memtable::new();
+        if wal_recovery.writable_memtable.is_some() {
+            let recovered_memtable: &mut memtable::Memtable =
+                wal_recovery.writable_memtable.as_mut().unwrap();
+            std::mem::swap(&mut memtable, recovered_memtable);
+        }
         let wal = wal::Wal::new(memtable.id.clone());
 
         let mut sstable_reader = sstable::reader::Reader::new();
         sstable_reader.init();
         let sstable_reader_ptr = Arc::new(RwLock::new(sstable_reader));
 
-        let flushing_memtables = Arc::new(RwLock::new(vec![]));
+        let mut flushing_memtables = vec![];
+        wal_recovery.flushing_memtables.into_iter().for_each(|v| {
+            let mt_ptr = Arc::new(v);
+            flushing_memtables.push(mt_ptr.clone());
+        });
+        let flushing_memtables_ptr = Arc::new(RwLock::new(flushing_memtables));
 
         let engine = Engine {
-            // _handle,
             sstable_reader: sstable_reader_ptr.clone(),
-            flushing_memtables: flushing_memtables.clone(),
+            flushing_memtables: flushing_memtables_ptr.clone(),
             flush_sender: Mutex::new(flush_sender),
             writable_table: memtable,
             writable_wal: wal,
@@ -54,7 +66,7 @@ impl Engine {
                 reader.add_memtable(&value);
 
                 // remove the memtable from the list of flushing memtables
-                let mut memtables = flushing_memtables.write().unwrap();
+                let mut memtables = flushing_memtables_ptr.write().unwrap();
                 let position_o = memtables.iter().position(|v| Arc::ptr_eq(v, &value));
                 if position_o.is_some() {
                     let position = position_o.unwrap();
@@ -67,6 +79,16 @@ impl Engine {
                 }
             }
         });
+
+        // send all the flushing memtables
+        engine
+            .flushing_memtables
+            .read()
+            .unwrap()
+            .iter()
+            .for_each(|v| {
+                engine.flush_sender.lock().unwrap().send(v.clone()).unwrap();
+            });
 
         return engine;
     }
@@ -90,9 +112,7 @@ impl Engine {
                 .push(mt_pointer.clone());
             let sender = self.flush_sender.lock().unwrap();
             let flush_result = sender.send(mt_pointer.clone());
-
-            // TODO need to handle this result
-            println!("flush send result = {:?}", flush_result);
+            flush_result.unwrap(); // TODO could handle this
         }
     }
 
@@ -112,7 +132,6 @@ impl Engine {
         };
 
         let mts: &Vec<Arc<memtable::Memtable>> = &self.flushing_memtables.read().unwrap();
-
         for mt in mts {
             let found = mt.search(&key);
             if found.is_some() {
