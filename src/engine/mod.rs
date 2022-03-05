@@ -19,11 +19,14 @@ pub struct Engine {
 impl Engine {
     // TODO consider whether it's a dumbo thing to do to do all this init stuff in constructor
     pub fn new() -> Self {
+        // derive init state from the WAL that are on disk
         // TODO handle this error
         let mut wal_recovery = wal::recover().unwrap();
 
+        // when we want to flush a memtable, we send a pointer to it in this channel
         let (flush_sender, flush_receiver) = mpsc::channel::<Arc<memtable::Memtable>>();
 
+        // setup the memtable we'll be putting new writes into and the WAL
         let mut memtable = memtable::Memtable::new();
         if wal_recovery.writable_memtable.is_some() {
             let recovered_memtable: &mut memtable::Memtable =
@@ -32,10 +35,13 @@ impl Engine {
         }
         let wal = wal::Wal::new(memtable.id.clone());
 
+        // setup the thing to read from sstables (on disk)
         let mut sstable_reader = sstable::reader::Reader::new();
         sstable_reader.init();
         let sstable_reader_ptr = Arc::new(RwLock::new(sstable_reader));
 
+        // setup out list of memtables that we'll be reading from while they're still in the
+        //process of beling flushed to disk
         let mut flushing_memtables = vec![];
         wal_recovery.flushing_memtables.into_iter().for_each(|v| {
             let mt_ptr = Arc::new(v);
@@ -43,6 +49,7 @@ impl Engine {
         });
         let flushing_memtables_ptr = Arc::new(RwLock::new(flushing_memtables));
 
+        // finally create the engine
         let engine = Engine {
             sstable_reader: sstable_reader_ptr.clone(),
             flushing_memtables: flushing_memtables_ptr.clone(),
@@ -51,7 +58,7 @@ impl Engine {
             writable_wal: wal,
         };
 
-        // handle sending the memtables to be flushed and update internal state
+        // setup handlir for sending the memtables to be flushed and update internal state
         let _handle = thread::spawn(move || {
             while let Ok(value) = flush_receiver.recv() {
                 // flush the memtable
@@ -80,7 +87,8 @@ impl Engine {
             }
         });
 
-        // send all the flushing memtables
+        // send all the flushing memtables that we read during tecovery to be flushed..
+        // the flush didn't complete before the last shutdown so we'll retry it
         engine
             .flushing_memtables
             .read()
@@ -94,26 +102,47 @@ impl Engine {
     }
 
     pub fn write(&mut self, key: &[u8], value: &[u8]) {
-        self.writable_wal.write(key, value).unwrap();
-        self.writable_table.insert(key.to_vec(), value.to_vec());
+        self.writable_wal.write(key, Some(value)).unwrap();
+        self.writable_table
+            .insert(key.to_vec(), Some(value.to_vec()));
+
+        println!("{:?}", self.writable_table.size());
 
         // TODO memtable size needs to be configurable
         if self.writable_table.size() > 3 {
-            let mut tmp = memtable::Memtable::new();
-            let mut new_wal = wal::Wal::new(tmp.id.clone());
-            std::mem::swap(&mut self.writable_table, &mut tmp);
-            std::mem::swap(&mut self.writable_wal, &mut new_wal);
-
-            log::debug!("sending memtable to flush (id: {:?})", tmp.id);
-            let mt_pointer = Arc::new(tmp);
-            self.flushing_memtables
-                .write()
-                .unwrap()
-                .push(mt_pointer.clone());
-            let sender = self.flush_sender.lock().unwrap();
-            let flush_result = sender.send(mt_pointer.clone());
-            flush_result.unwrap(); // TODO could handle this
+            self.flush_writable_memtable();
         }
+    }
+
+    pub fn delete(&mut self, key: &[u8]) {
+        // TODO uncomment below
+        // self.writable_wal.write(key, Some(value)).unwrap();
+
+        self.writable_table.insert(key.to_vec(), None);
+
+        println!("{:?}", self.writable_table.size());
+
+        // TODO memtable size needs to be configurable
+        if self.writable_table.size() > 3 {
+            self.flush_writable_memtable();
+        }
+    }
+
+    fn flush_writable_memtable(&mut self) {
+        let mut tmp = memtable::Memtable::new();
+        let mut new_wal = wal::Wal::new(tmp.id.clone());
+        std::mem::swap(&mut self.writable_table, &mut tmp);
+        std::mem::swap(&mut self.writable_wal, &mut new_wal);
+
+        log::debug!("sending memtable to flush (id: {:?})", tmp.id);
+        let mt_pointer = Arc::new(tmp);
+        self.flushing_memtables
+            .write()
+            .unwrap()
+            .push(mt_pointer.clone());
+        let sender = self.flush_sender.lock().unwrap();
+        let flush_result = sender.send(mt_pointer.clone());
+        flush_result.unwrap(); // TODO could handle this
     }
 
     pub fn find(&self, key: &[u8]) -> Option<Vec<u8>> {

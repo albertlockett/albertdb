@@ -32,13 +32,13 @@ impl Wal {
         Wal { file, id }
     }
 
-    pub fn write(&mut self, key: &[u8], value: &[u8]) -> io::Result<u32> {
+    pub fn write(&mut self, key: &[u8], value: Option<&[u8]>) -> io::Result<u32> {
         let write_entry = WriteEntry {
             flags: 0,
             key_length: key.len() as u32,
             key: key.to_owned(),
-            value_length: value.len() as u32,
-            value: value.to_owned(),
+            value_length: value.unwrap().len() as u32,
+            value: value.unwrap().to_owned(),
         };
 
         // TODO could move this next block into a new func idk
@@ -129,7 +129,7 @@ pub fn recover() -> io::Result<WalRecovery> {
                     log::warn!("recovered more than one memtable via WAL that were not in process of flushing - this could lead to invalid recovery state");
                 }
                 memtable.into_iter().for_each(|(k, v)| {
-                    recovery_wal.write(&k, &v).unwrap();
+                    recovery_wal.write(&k, Some(v.as_ref().unwrap())).unwrap();
                     writable_memtable.insert(k, v);
                 });
                 fs::remove_file(path)?;
@@ -193,6 +193,6 @@ fn recover_memtable(path: &path::Path) -> io::Result<memtable::Memtable> {
             value.push(bytes.next().unwrap()?);
         }
 
-        memtable.insert(key, value);
+        memtable.insert(key, Some(value));
     }
 }

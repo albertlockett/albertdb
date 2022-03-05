@@ -19,6 +19,7 @@ struct Entry {
     key: Vec<u8>,
     value_length: u32,
     value: Vec<u8>,
+    deleted: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -64,13 +65,27 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
     let entries: Vec<Entry> = iter
         .map(|(key, value)| {
             let key_length = key.len() as u32;
-            let value_length = value.len() as u32;
+            let mut value_length = 0;
+            let mut entry_value = vec![];
+            let mut deleted = true;
+            if value.is_some() {
+                value_length = value.as_ref().unwrap().len() as u32;
+                entry_value = value.unwrap();
+                deleted = false;
+            }
+
+            let mut flags: u8 = 0;
+            if deleted {
+                flags += 1 << 7;
+            }
+
             Entry {
-                flags: 0,
+                flags,
                 key,
                 key_length,
-                value,
+                value: entry_value,
                 value_length,
+                deleted,
             }
         })
         .collect();
@@ -96,6 +111,8 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
 
     for entry in &entries {
         encoder.write(&[entry.flags])?;
+        current_block.count += 1;
+
         encoder.write(&[
             (entry.key_length >> 24) as u8,
             (entry.key_length >> 16) as u8,
@@ -103,21 +120,22 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
             entry.key_length as u8,
         ])?;
         encoder.write(&entry.key)?;
-
-        encoder.write(&[
-            (entry.value_length >> 24) as u8,
-            (entry.value_length >> 16) as u8,
-            (entry.value_length >> 8) as u8,
-            entry.value_length as u8,
-        ])?;
-        encoder.write(&entry.value)?;
-
-        current_block.size += entry.value_length;
         current_block.size += entry.key_length;
+
+        if !entry.deleted {
+            encoder.write(&[
+                (entry.value_length >> 24) as u8,
+                (entry.value_length >> 16) as u8,
+                (entry.value_length >> 8) as u8,
+                entry.value_length as u8,
+            ])?;
+            encoder.write(&entry.value)?;
+            current_block.size += entry.value_length;
+        }
+
         if current_block.count == 0 {
             current_block.start_key = entry.key.clone();
         }
-        current_block.count += 1;
 
         // flush compressed block
         if current_block.size > max_block_size_uncompressed {
@@ -174,8 +192,8 @@ mod flush_to_sstable_tests {
     #[test]
     fn smoke_test() {
         let mut m = memtable::Memtable::new();
-        m.insert("abc".bytes().collect(), "abc".bytes().collect());
-        m.insert("def".bytes().collect(), "dev".bytes().collect());
+        m.insert("abc".bytes().collect(), Some("abc".bytes().collect()));
+        m.insert("def".bytes().collect(), Some("dev".bytes().collect()));
         let result = flush_to_sstable(&m);
         println!("{:?} {:?}", m, result);
     }

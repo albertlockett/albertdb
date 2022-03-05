@@ -18,6 +18,7 @@ async fn main() -> std::io::Result<()> {
             .data(mmt_arc.clone())
             .route("/write2", web::post().to(handle_write))
             .route("/read", web::post().to(handle_read))
+            .route("/delete", web::post().to(handle_delete))
     });
 
     server
@@ -33,11 +34,6 @@ pub struct WritePayload {
     value: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct ReadPayload {
-    key: String,
-}
-
 fn handle_write(
     mmt_arc: web::Data<Arc<RwLock<Engine>>>,
     req: web::Json<WritePayload>,
@@ -47,6 +43,11 @@ fn handle_write(
         .unwrap()
         .write(req.key.as_bytes(), req.value.as_bytes());
     HttpResponse::Ok().body("nice")
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ReadPayload {
+    key: String,
 }
 
 fn handle_read(
@@ -60,4 +61,17 @@ fn handle_read(
     } else {
         HttpResponse::Ok().body("biffed it")
     }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DeletePayload {
+    key: String,
+}
+
+fn handle_delete(
+    mmt_arc: web::Data<Arc<RwLock<Engine>>>,
+    req: web::Json<DeletePayload>,
+) -> HttpResponse {
+    mmt_arc.write().unwrap().delete(req.key.as_bytes());
+    HttpResponse::Ok().body("OK")
 }

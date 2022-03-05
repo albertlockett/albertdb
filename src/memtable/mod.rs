@@ -5,7 +5,7 @@ use std::sync::RwLock;
 
 pub struct Node {
     key: Vec<u8>,
-    value: Vec<u8>,
+    value: Option<Vec<u8>>,
     priority: f64,
     left: Link,
     right: Link,
@@ -143,7 +143,7 @@ impl NodeStuff for Arc<RwLock<Node>> {
 
     fn search(&self, key: &Vec<u8>) -> Option<Vec<u8>> {
         if self.read().unwrap().key == *key {
-            return Some(self.read().unwrap().value.clone());
+            return self.read().unwrap().value.clone();
         }
 
         let has_left = !matches!(self.get_left(), None);
@@ -199,11 +199,52 @@ impl Memtable {
         return None;
     }
 
-    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
-        self.size += 1;
-
+    // TODO
+    // - TODO insert should replace the value vec if the key already exists
+    pub fn insert(&mut self, key: Vec<u8>, mut value: Option<Vec<u8>>) {
         let mut rng = rand::thread_rng();
         let priority: f64 = rng.gen();
+
+        // oops the tree is empty - new node is the root
+        if matches!(self.root, None) {
+            let new_node = Arc::new(RwLock::new(Node {
+                key,
+                value,
+                priority,
+                left: None,
+                right: None,
+                parent: None,
+            }));
+            self.size += 1;
+            self.root = Some(new_node);
+            return;
+        }
+
+        // find the parent of the node we're going to insert
+        let mut node_link: Link = Some(self.root.as_ref().unwrap().clone());
+        let mut parent_link: Link = None;
+        let mut replace = false;
+        while !matches!(node_link, None) {
+            let node = node_link.as_ref().unwrap().clone();
+            parent_link = Some(node.clone());
+
+            println!("{:?}, {:?}", key, node.read().unwrap().key);
+            if key == node.read().unwrap().key {
+                replace = true;
+                break;
+            } else if key > node.read().unwrap().key {
+                node_link = node.get_right();
+            } else {
+                node_link = node.get_left();
+            }
+        }
+
+        if replace {
+            println!("replicaing");
+            std::mem::swap(&mut value, &mut parent_link.unwrap().write().unwrap().value);
+            return;
+        }
+
         let new_node = Arc::new(RwLock::new(Node {
             key,
             value,
@@ -213,26 +254,8 @@ impl Memtable {
             parent: None,
         }));
 
-        // oops the tree is empty - new node is the root
-        if matches!(self.root, None) {
-            self.root = Some(new_node);
-            return;
-        }
-
-        // find the parent of the node we're going to insert
-        let mut node_link: Link = Some(self.root.as_ref().unwrap().clone());
-        let mut parent_link: Link = None;
-
-        while !matches!(node_link, None) {
-            let node = node_link.as_ref().unwrap().clone();
-            parent_link = Some(node.clone());
-            if new_node.read().unwrap().key > node.read().unwrap().key {
-                node_link = node.get_right();
-            } else {
-                node_link = node.get_left();
-            }
-        }
-
+        println!("not replicatin");
+        self.size += 1;
         let parent = parent_link.as_ref().unwrap().clone();
         if parent.read().unwrap().key <= new_node.read().unwrap().key {
             parent.set_right(Some(new_node.clone()))
@@ -829,7 +852,7 @@ impl MemtableIterator {
 }
 
 impl Iterator for MemtableIterator {
-    type Item = (Vec<u8>, Vec<u8>);
+    type Item = (Vec<u8>, Option<Vec<u8>>);
 
     fn next(&mut self) -> Option<Self::Item> {
         let link = self.unvisited.pop()?;
@@ -844,7 +867,7 @@ impl Iterator for MemtableIterator {
 }
 
 impl IntoIterator for Memtable {
-    type Item = (Vec<u8>, Vec<u8>);
+    type Item = (Vec<u8>, Option<Vec<u8>>);
     type IntoIter = MemtableIterator;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

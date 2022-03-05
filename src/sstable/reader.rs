@@ -150,6 +150,9 @@ fn find_from_table(
             return Ok(None);
         }
 
+        let flags_1 = flags_1_option.unwrap()?;
+        let deleted = flags_1 & (1 << 7) > 0;
+
         let key_length = ((bytes.next().unwrap()? as u32) << 24)
             + ((bytes.next().unwrap()? as u32) << 16)
             + ((bytes.next().unwrap()? as u32) << 8)
@@ -160,13 +163,20 @@ fn find_from_table(
             key.push(bytes.next().unwrap()?);
         }
 
-        let value_length = ((bytes.next().unwrap()? as u32) << 24)
-            + ((bytes.next().unwrap()? as u32) << 16)
-            + ((bytes.next().unwrap()? as u32) << 8)
-            + (bytes.next().unwrap()? as u32);
+        let mut value_length = 0;
+        if !deleted {
+            value_length = ((bytes.next().unwrap()? as u32) << 24)
+                + ((bytes.next().unwrap()? as u32) << 16)
+                + ((bytes.next().unwrap()? as u32) << 8)
+                + (bytes.next().unwrap()? as u32);
+        }
 
         // if key matches, return result
         if &key == search_key {
+            if deleted {
+                return Ok(None);
+            }
+
             let mut value = Vec::with_capacity(value_length as usize);
             for _ in 0..value_length {
                 value.push(bytes.next().unwrap()?);
@@ -178,6 +188,7 @@ fn find_from_table(
                 key,
                 value_length,
                 value,
+                deleted,
             }));
         }
 
