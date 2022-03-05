@@ -195,7 +195,12 @@ fn find_block(search_key: &[u8], table_meta: &TableMeta) -> Option<usize> {
             idx = idx - ((idx - min) / 2);
         } else {
             if idx >= table_meta.blocks.len() - 1 {
-                return None;
+                let last_key = &table_meta.blocks[table_meta.blocks.len() - 1].start_key;
+                if **last_key < *search_key {
+                    return Some(table_meta.blocks.len() - 1)
+                } else {
+                    return None;
+                }
             }
 
             min = idx;
@@ -346,7 +351,7 @@ mod find_block_tests {
         });
 
         let search_key: Vec<u8> = "f".bytes().collect();
-        assert_eq!(None, find_block(&search_key, &table_meta));
+        assert_eq!(2, find_block(&search_key, &table_meta).unwrap());
     }
 
     #[test]
@@ -380,6 +385,9 @@ mod find_block_tests {
 
         search_key = "w".bytes().collect();
         assert_eq!(5, find_block(&search_key, &table_meta).unwrap());
+
+        search_key = "z2".bytes().collect();
+        assert_eq!(6, find_block(&search_key, &table_meta).unwrap());
 
         search_key = "1".bytes().collect();
         assert_eq!(None, find_block(&search_key, &table_meta));
