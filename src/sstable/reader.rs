@@ -7,9 +7,7 @@ use std::io::{Read, Seek};
 use std::path;
 
 use super::{BlockMeta, Entry, TableMeta};
-
-// TODO
-// - some implementation to let us know that there is a newly flushd sstable
+use crate::memtable;
 
 pub struct Reader {
     sstables: Vec<(TableMeta, Box<path::Path>)>,
@@ -76,6 +74,29 @@ impl Reader {
         }
         None
     }
+
+    pub fn add_memtable(&mut self, memtable: &memtable::Memtable) {
+        let filename = format!("/tmp/sstable-data-{}", memtable.id);
+        let path = path::PathBuf::from(filename).into_boxed_path();
+        let meta_path = to_metadata_path(&path);
+        let table_meta = read_table_meta(path::Path::new(&meta_path));
+        log::debug!(
+            "memtable added = {:?}, num_blocks = {:?}. There are now {:?} reader memtables",
+            path,
+            table_meta.blocks.len(),
+            self.sstables.len() + 1,
+        );
+        self.sstables.push((table_meta, path));
+    }
+}
+
+fn to_metadata_path(path: &path::Path) -> String {
+    let meta_path = String::from(
+        Regex::new("sstable-data")
+            .unwrap()
+            .replace(path.to_str().unwrap(), "sstable-meta"),
+    );
+    return meta_path;
 }
 
 fn read_table_meta(path: &path::Path) -> TableMeta {
@@ -197,7 +218,7 @@ fn find_block(search_key: &[u8], table_meta: &TableMeta) -> Option<usize> {
             if idx >= table_meta.blocks.len() - 1 {
                 let last_key = &table_meta.blocks[table_meta.blocks.len() - 1].start_key;
                 if **last_key < *search_key {
-                    return Some(table_meta.blocks.len() - 1)
+                    return Some(table_meta.blocks.len() - 1);
                 } else {
                     return None;
                 }

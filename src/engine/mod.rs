@@ -1,7 +1,7 @@
 use log;
 use std::sync::mpsc;
 use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 use std::thread;
 
 use crate::memtable;
@@ -9,35 +9,62 @@ use crate::sstable;
 use crate::wal;
 
 pub struct Engine {
-    _handle: std::thread::JoinHandle<()>,
-    sender: Mutex<mpsc::Sender<Arc<memtable::Memtable>>>,
+    // _handle: std::thread::JoinHandle<()>,
+    flush_sender: Mutex<mpsc::Sender<Arc<memtable::Memtable>>>,
     writable_table: memtable::Memtable,
     writable_wal: wal::Wal,
-    flushing_memtables: Vec<Arc<memtable::Memtable>>,
-    sstable_reader: sstable::reader::Reader,
+    flushing_memtables: Arc<RwLock<Vec<Arc<memtable::Memtable>>>>,
+    sstable_reader: Arc<RwLock<sstable::reader::Reader>>,
 }
 
 impl Engine {
     pub fn new() -> Self {
-        let (sender, receiver) = mpsc::channel::<Arc<memtable::Memtable>>();
-        let _handle = thread::spawn(move || {
-            while let Ok(value) = receiver.recv() {
-                sstable::flush_to_sstable(&value).unwrap();
-            }
-        });
+        let (flush_sender, flush_receiver) = mpsc::channel::<Arc<memtable::Memtable>>();
+
         let memtable = memtable::Memtable::new();
         let wal = wal::Wal::new(memtable.id.clone());
+
         let mut sstable_reader = sstable::reader::Reader::new();
         sstable_reader.init();
+        let sstable_reader_ptr = Arc::new(RwLock::new(sstable_reader));
 
-        Engine {
-            _handle,
-            sstable_reader,
-            sender: Mutex::new(sender),
+        let flushing_memtables = Arc::new(RwLock::new(vec![]));
+
+        let engine = Engine {
+            // _handle,
+            sstable_reader: sstable_reader_ptr.clone(),
+            flushing_memtables: flushing_memtables.clone(),
+            flush_sender: Mutex::new(flush_sender),
             writable_table: memtable,
             writable_wal: wal,
-            flushing_memtables: vec![],
-        }
+        };
+
+        // handle sending the memtables to be flushed and update internal state
+        let _handle = thread::spawn(move || {
+            while let Ok(value) = flush_receiver.recv() {
+                // flush the memtable
+                sstable::flush_to_sstable(&value).unwrap();
+
+                // signal to the reader that there's a new memtable to read
+                let mut reader = sstable_reader_ptr.write().unwrap();
+                reader.add_memtable(&value);
+
+                // remove the memtable from the list of flushing memtables
+                let mut memtables = flushing_memtables.write().unwrap();
+                let position_o = memtables.iter().position(|v| Arc::ptr_eq(v, &value));
+                if position_o.is_some() {
+                    let position = position_o.unwrap();
+                    log::debug!(
+                        "removing flushing memtable at position {:?}. There are now {:?} flushing memtables", 
+                        position,
+                        memtables.len() - 1
+                    );
+                    memtables.remove(position);
+                }
+            }
+        });
+
+        return engine;
     }
 
     pub fn write(&mut self, key: &[u8], value: &[u8]) {
@@ -53,8 +80,11 @@ impl Engine {
 
             log::debug!("sending memtable to flush (id: {:?})", tmp.id);
             let mt_pointer = Arc::new(tmp);
-            self.flushing_memtables.push(mt_pointer.clone());
-            let sender = self.sender.lock().unwrap();
+            self.flushing_memtables
+                .write()
+                .unwrap()
+                .push(mt_pointer.clone());
+            let sender = self.flush_sender.lock().unwrap();
             let flush_result = sender.send(mt_pointer.clone());
 
             // TODO need to handle this result
@@ -77,7 +107,9 @@ impl Engine {
             return found;
         };
 
-        for mt in &self.flushing_memtables {
+        let mts: &Vec<Arc<memtable::Memtable>> = &self.flushing_memtables.read().unwrap();
+
+        for mt in mts {
             let found = mt.search(&key);
             if found.is_some() {
                 if log::log_enabled!(log::Level::Debug) {
@@ -92,7 +124,7 @@ impl Engine {
             }
         }
 
-        let disk_result = self.sstable_reader.find(key);
+        let disk_result = self.sstable_reader.read().unwrap().find(key);
         if disk_result.is_some() {
             if log::log_enabled!(log::Level::Debug) {
                 log::debug!(
