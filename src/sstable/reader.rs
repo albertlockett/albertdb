@@ -1,9 +1,9 @@
+use flate2::read::GzDecoder;
 use log;
 use regex::Regex;
-use std::collections::HashMap;
 use std::fs;
 use std::io;
-use std::io::Read;
+use std::io::{Read, Seek};
 use std::path;
 
 use super::{BlockMeta, Entry, TableMeta};
@@ -12,16 +12,12 @@ use super::{BlockMeta, Entry, TableMeta};
 // - some implementation to let us know that there is a newly flushd sstable
 
 pub struct Reader {
-    sstables: Vec<Box<path::Path>>,
-    blockMeta: HashMap<String, TableMeta>,
+    sstables: Vec<(TableMeta, Box<path::Path>)>,
 }
 
 impl Reader {
     pub fn new() -> Self {
-        Reader {
-            sstables: vec![],
-            blockMeta: HashMap::new(),
-        }
+        Reader { sstables: vec![] }
     }
 
     // this scans the sstable directory for sstables
@@ -47,8 +43,7 @@ impl Reader {
                     table_meta.blocks.len()
                 );
 
-                self.blockMeta.insert(meta_path, table_meta);
-                self.sstables.push(path);
+                self.sstables.push((table_meta, path));
             }
         }
 
@@ -56,9 +51,14 @@ impl Reader {
     }
 
     pub fn find(&self, key: &[u8]) -> Option<Vec<u8>> {
-        for path in &self.sstables {
+        for (table_meta, path) in &self.sstables {
+            let block = find_block(key, table_meta);
+            if block.is_none() {
+                continue;
+            }
+
             log::debug!("searching for '{:?}' in '{:?}", key, path);
-            let result = find_from_table(key, path);
+            let result = find_from_table(key, path, &table_meta.blocks[block.unwrap()]);
             match result {
                 Ok(Some(entry)) => {
                     log::debug!("found '{:?}' in '{:?}", key, path);
@@ -101,9 +101,41 @@ fn is_sstable(path: &path::Path) -> bool {
     re.is_match(path.to_str().unwrap())
 }
 
-fn find_from_table(search_key: &[u8], path: &path::Path) -> io::Result<Option<Entry>> {
-    let file = fs::OpenOptions::new().read(true).open(path)?;
-    let mut bytes = file.bytes();
+fn deserialize_block(path: &path::Path, block: &BlockMeta) -> io::Result<Vec<u8>> {
+    println!("{:?}", block);
+    let mut file = fs::OpenOptions::new().read(true).open(path)?;
+    let start = block.start_offset as u64;
+    let seek_start = io::SeekFrom::Start(start);
+    file.seek(seek_start)?;
+    let mut bytes = Vec::<u8>::with_capacity(block.size_compressed as usize);
+    file.read_to_end(&mut bytes)?;
+    // for i in 0..block.size_compressed {
+    //     bytes.push(
+    // }
+    // file.take(block.size_compressed as u64).read_exact(&mut bytes)?;
+
+    // return Ok(vec![]);
+    let mut decoder = GzDecoder::new(&*bytes);
+    let mut decompressed = Vec::<u8>::with_capacity(block.size as usize);
+    // decoder.read_vectored(&mut decompressed.reader());
+    // decoder.read_exact(&mut decompressed)?;
+    // decoder.read_to_end(&mut decompressed)?;
+    println!("decoding to string {:?}", bytes);
+    let mut s = String::new();
+    decoder.read_to_string(&mut s)?;
+    println!("{:?}", s);
+    return Ok(decompressed);
+}
+
+fn find_from_table(
+    search_key: &[u8],
+    path: &path::Path,
+    block: &BlockMeta,
+) -> io::Result<Option<Entry>> {
+    // let file = fs::OpenOptions::new().read(true).open(path)?;
+    // let mut bytes = file.bytes();
+    let bytes1 = deserialize_block(path, block)?;
+    let mut bytes = bytes1.into_iter().map(|b| Ok::<u8, io::Error>(b));
 
     loop {
         let flags_1_option = bytes.next();
@@ -181,7 +213,6 @@ fn find_block(search_key: &[u8], table_meta: &TableMeta) -> Option<usize> {
 
             min = idx;
             idx = 1 + idx + (max - idx) / 2;
-            
         }
     }
 }
@@ -199,18 +230,21 @@ mod find_block_tests {
             size: 10,
             size_compressed: 10,
             start_key: "a".bytes().collect(),
+            start_offset: 0,
         });
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
             size_compressed: 10,
             start_key: "c".bytes().collect(),
+            start_offset: 10,
         });
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
             size_compressed: 10,
             start_key: "d".bytes().collect(),
+            start_offset: 20,
         });
 
         let search_key: Vec<u8> = "b".bytes().collect();
@@ -226,18 +260,21 @@ mod find_block_tests {
             size: 10,
             size_compressed: 10,
             start_key: "a".bytes().collect(),
+            start_offset: 0,
         });
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
             size_compressed: 10,
             start_key: "c".bytes().collect(),
+            start_offset: 10,
         });
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
             size_compressed: 10,
             start_key: "e".bytes().collect(),
+            start_offset: 20,
         });
 
         let search_key: Vec<u8> = "d".bytes().collect();
@@ -252,18 +289,21 @@ mod find_block_tests {
             size: 10,
             size_compressed: 10,
             start_key: "b".bytes().collect(),
+            start_offset: 0,
         });
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
             size_compressed: 10,
             start_key: "c".bytes().collect(),
+            start_offset: 10,
         });
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
             size_compressed: 10,
             start_key: "e".bytes().collect(),
+            start_offset: 20,
         });
 
         let search_key: Vec<u8> = "a".bytes().collect();
@@ -278,18 +318,21 @@ mod find_block_tests {
             size: 10,
             size_compressed: 10,
             start_key: "b".bytes().collect(),
+            start_offset: 0,
         });
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
             size_compressed: 10,
             start_key: "c".bytes().collect(),
+            start_offset: 10,
         });
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
             size_compressed: 10,
             start_key: "e".bytes().collect(),
+            start_offset: 20,
         });
 
         let search_key: Vec<u8> = "f".bytes().collect();

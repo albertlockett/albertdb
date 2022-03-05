@@ -21,7 +21,7 @@ struct Entry {
     value: Vec<u8>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct TableMeta {
     blocks: Vec<BlockMeta>,
     timestamp: u128,
@@ -39,12 +39,13 @@ impl TableMeta {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct BlockMeta {
     count: u32,
     size: u32,
     size_compressed: u32,
     start_key: Vec<u8>,
+    start_offset: u32,
 }
 
 //
@@ -86,9 +87,11 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
         size: 0,
         size_compressed: 0,
         start_key: vec![],
+        start_offset: 0,
     };
 
     let max_block_size_uncompressed = 20;
+    let mut total_bytes_written = 0u32;
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
 
     for entry in &entries {
@@ -129,6 +132,7 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
                 current_block.start_key,
             );
             table_meta.blocks.push(current_block);
+            total_bytes_written += bytes.len() as u32;
             file.write(&bytes)?;
 
             encoder = GzEncoder::new(Vec::new(), Compression::default());
@@ -137,6 +141,7 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
                 size: 0,
                 size_compressed: 0,
                 start_key: vec![],
+                start_offset: total_bytes_written,
             };
         }
     }
