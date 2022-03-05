@@ -102,28 +102,16 @@ fn is_sstable(path: &path::Path) -> bool {
 }
 
 fn deserialize_block(path: &path::Path, block: &BlockMeta) -> io::Result<Vec<u8>> {
-    println!("{:?}", block);
     let mut file = fs::OpenOptions::new().read(true).open(path)?;
     let start = block.start_offset as u64;
     let seek_start = io::SeekFrom::Start(start);
     file.seek(seek_start)?;
     let mut bytes = Vec::<u8>::with_capacity(block.size_compressed as usize);
     file.read_to_end(&mut bytes)?;
-    // for i in 0..block.size_compressed {
-    //     bytes.push(
-    // }
-    // file.take(block.size_compressed as u64).read_exact(&mut bytes)?;
 
-    // return Ok(vec![]);
     let mut decoder = GzDecoder::new(&*bytes);
     let mut decompressed = Vec::<u8>::with_capacity(block.size as usize);
-    // decoder.read_vectored(&mut decompressed.reader());
-    // decoder.read_exact(&mut decompressed)?;
-    // decoder.read_to_end(&mut decompressed)?;
-    println!("decoding to string {:?}", bytes);
-    let mut s = String::new();
-    decoder.read_to_string(&mut s)?;
-    println!("{:?}", s);
+    decoder.read_to_end(&mut decompressed)?;
     return Ok(decompressed);
 }
 
@@ -132,8 +120,6 @@ fn find_from_table(
     path: &path::Path,
     block: &BlockMeta,
 ) -> io::Result<Option<Entry>> {
-    // let file = fs::OpenOptions::new().read(true).open(path)?;
-    // let mut bytes = file.bytes();
     let bytes1 = deserialize_block(path, block)?;
     let mut bytes = bytes1.into_iter().map(|b| Ok::<u8, io::Error>(b));
 
@@ -190,22 +176,23 @@ fn find_block(search_key: &[u8], table_meta: &TableMeta) -> Option<usize> {
 
     loop {
         let curr_key = &table_meta.blocks[idx].start_key;
-        if *search_key <= **curr_key {
-            if idx == 0 {
-                return None;
-            }
 
-            let prev_key = &table_meta.blocks[idx - 1].start_key;
-            if *search_key > **prev_key {
-                return Some(idx);
+        if *search_key == **curr_key {
+            return Some(idx);
+        }
+
+        if *search_key < **curr_key {
+            if idx - min == 1 {
+                let prev_key = &table_meta.blocks[idx - 1].start_key;
+                if **prev_key < *search_key {
+                    return Some(idx - 1);
+                } else {
+                    return None;
+                }
             }
 
             max = idx;
-            if idx - min == 1 {
-                idx = min
-            } else {
-                idx = idx - ((idx - min) / 2);
-            }
+            idx = idx - ((idx - min) / 2);
         } else {
             if idx >= table_meta.blocks.len() - 1 {
                 return None;
@@ -221,6 +208,29 @@ fn find_block(search_key: &[u8], table_meta: &TableMeta) -> Option<usize> {
 mod find_block_tests {
     use super::super::BlockMeta;
     use super::*;
+
+    #[test]
+    fn test5() {
+        let mut table_meta = TableMeta::new();
+        table_meta.blocks.push(BlockMeta {
+            count: 10,
+            size: 10,
+            size_compressed: 10,
+            start_key: "marche".bytes().collect(),
+            start_offset: 0,
+        });
+        table_meta.blocks.push(BlockMeta {
+            count: 10,
+            size: 10,
+            size_compressed: 10,
+            start_key: "toyota".bytes().collect(),
+            start_offset: 10,
+        });
+
+        let search_key: Vec<u8> = "rue".bytes().collect();
+
+        assert_eq!(0 as usize, find_block(&search_key, &table_meta).unwrap());
+    }
 
     #[test]
     fn smoke_test() {
@@ -249,7 +259,7 @@ mod find_block_tests {
 
         let search_key: Vec<u8> = "b".bytes().collect();
 
-        assert_eq!(1 as usize, find_block(&search_key, &table_meta).unwrap());
+        assert_eq!(0 as usize, find_block(&search_key, &table_meta).unwrap());
     }
 
     #[test]
@@ -278,7 +288,7 @@ mod find_block_tests {
         });
 
         let search_key: Vec<u8> = "d".bytes().collect();
-        assert_eq!(2 as usize, find_block(&search_key, &table_meta).unwrap());
+        assert_eq!(1 as usize, find_block(&search_key, &table_meta).unwrap());
     }
 
     #[test]
@@ -336,6 +346,42 @@ mod find_block_tests {
         });
 
         let search_key: Vec<u8> = "f".bytes().collect();
+        assert_eq!(None, find_block(&search_key, &table_meta));
+    }
+
+    #[test]
+    fn test6() {
+        let mut table_meta = TableMeta::new();
+        let starts = vec!["a", "g", "j", "l", "r", "u", "z"];
+        for i in 0..starts.len() {
+            table_meta.blocks.push(BlockMeta {
+                count: 10,
+                size: 10,
+                size_compressed: 10,
+                start_key: starts[i].bytes().collect(),
+                start_offset: i as u32 * 10,
+            })
+        }
+
+        let mut search_key: Vec<u8> = "f".bytes().collect();
+        assert_eq!(0, find_block(&search_key, &table_meta).unwrap());
+
+        search_key = "h".bytes().collect();
+        assert_eq!(1, find_block(&search_key, &table_meta).unwrap());
+
+        search_key = "k".bytes().collect();
+        assert_eq!(2, find_block(&search_key, &table_meta).unwrap());
+
+        search_key = "m".bytes().collect();
+        assert_eq!(3, find_block(&search_key, &table_meta).unwrap());
+
+        search_key = "s".bytes().collect();
+        assert_eq!(4, find_block(&search_key, &table_meta).unwrap());
+
+        search_key = "w".bytes().collect();
+        assert_eq!(5, find_block(&search_key, &table_meta).unwrap());
+
+        search_key = "1".bytes().collect();
         assert_eq!(None, find_block(&search_key, &table_meta));
     }
 }
