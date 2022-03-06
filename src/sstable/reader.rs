@@ -1,6 +1,7 @@
 use flate2::read::GzDecoder;
 use log;
 use regex::Regex;
+use std::collections::VecDeque;
 use std::fs;
 use std::io;
 use std::io::{Read, Seek};
@@ -10,12 +11,12 @@ use super::{BlockMeta, Entry, TableMeta};
 use crate::memtable;
 
 pub struct Reader {
-    sstables: Vec<(TableMeta, Box<path::Path>)>,
+    sstables: VecDeque<(TableMeta, Box<path::Path>)>,
 }
 
 impl Reader {
     pub fn new() -> Self {
-        Reader { sstables: vec![] }
+        Reader { sstables: VecDeque::new() }
     }
 
     // this scans the sstable directory for sstables
@@ -24,7 +25,9 @@ impl Reader {
     // - try to ignore files called sstables, that aren't sstables (could do this by checking metadata)
     pub fn init(&mut self) {
         log::info!("initializing sstable reader");
-        let data_dir = "/tmp"; // TODO not have hard coded
+        let data_dir = "/tmp"; // TODO not have hard 
+        
+        let mut sstables = vec![];
         for file in fs::read_dir(data_dir).unwrap() {
             let path: Box<path::Path> = file.unwrap().path().into_boxed_path();
             if is_sstable(&path) {
@@ -41,12 +44,12 @@ impl Reader {
                     table_meta.blocks.len()
                 );
 
-                self.sstables.push((table_meta, path));
+                sstables.push((table_meta, path));
             }
         }
 
         // make sure the sstables are ordered newest to oldest
-        self.sstables.sort_by(|a, b| {
+        sstables.sort_by(|a, b| {
             let (a_meta, _1) = a;
             let (b_meta, _2) = b;
 
@@ -55,6 +58,10 @@ impl Reader {
             } else {
                 std::cmp::Ordering::Greater
             }
+        });
+
+        sstables.into_iter().for_each(|v| {
+            self.sstables.push_back(v);
         });
 
         log::info!("initialized with {} memtables", self.sstables.len());
@@ -103,7 +110,7 @@ impl Reader {
         );
 
         // TODO need to re-sort sstable
-        self.sstables.push((table_meta, path));
+        self.sstables.push_front((table_meta, path));
     }
 }
 

@@ -78,16 +78,6 @@ impl Wal {
         return Ok(1); // TODO return how many bytes we actually wrote
     }
 
-    pub fn read(&self) -> io::Result<bool> {
-        let filename = wal_filename(&self.id);
-        let path = path::Path::new(&filename);
-        let file = fs::OpenOptions::new().read(true).open(path)?;
-        let mut bytes = file.bytes();
-        // TODO implement the full readback
-        let g = bytes.next();
-        return Ok(true);
-    }
-
     pub fn delete(&self) -> io::Result<bool> {
         let filename = wal_filename(&self.id);
         let path = path::Path::new(&filename);
