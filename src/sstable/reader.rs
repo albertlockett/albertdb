@@ -151,7 +151,7 @@ fn find_from_table(
         }
 
         let flags_1 = flags_1_option.unwrap()?;
-        let deleted = flags_1 & (1 << 7) > 0;
+        let deleted = flags_1 & (1 << 6) > 0;
 
         let key_length = ((bytes.next().unwrap()? as u32) << 24)
             + ((bytes.next().unwrap()? as u32) << 16)

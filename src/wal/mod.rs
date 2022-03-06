@@ -33,15 +33,21 @@ impl Wal {
     }
 
     pub fn write(&mut self, key: &[u8], value: Option<&[u8]>) -> io::Result<u32> {
-        let write_entry = WriteEntry {
+        let mut write_entry = WriteEntry {
             flags: 0,
             key_length: key.len() as u32,
             key: key.to_owned(),
-            value_length: value.unwrap().len() as u32,
-            value: value.unwrap().to_owned(),
+            value_length: 0,
+            value: vec![]
         };
 
-        // TODO could move this next block into a new func idk
+        if value.is_none() {
+            write_entry.flags += 1 << 6;
+        } else {
+            write_entry.value_length = value.unwrap().len() as u32;
+            write_entry.value = value.unwrap().clone().to_owned();
+        }
+
         self.file.write(&[
             // write flags
             write_entry.flags,
@@ -50,18 +56,26 @@ impl Wal {
             (write_entry.key_length >> 16) as u8,
             (write_entry.key_length >> 8) as u8,
             write_entry.key_length as u8,
-            // write value length
-            (write_entry.value_length >> 24) as u8,
-            (write_entry.value_length >> 16) as u8,
-            (write_entry.value_length >> 8) as u8,
-            write_entry.value_length as u8,
         ])?;
+
+        if value.is_some() {
+            self.file.write(&[
+                // write value length
+                (write_entry.value_length >> 24) as u8,
+                (write_entry.value_length >> 16) as u8,
+                (write_entry.value_length >> 8) as u8,
+                write_entry.value_length as u8,
+            ])?;
+        }
         // write key and value
         self.file.write(&write_entry.key)?;
-        self.file.write(&write_entry.value)?;
-        self.file.flush()?;
 
-        return Ok(1);
+        if value.is_some() {
+            self.file.write(&write_entry.value)?;
+        }
+
+        self.file.flush()?;
+        return Ok(1); // TODO return how many bytes we actually wrote
     }
 
     pub fn read(&self) -> io::Result<bool> {
@@ -128,8 +142,13 @@ pub fn recover() -> io::Result<WalRecovery> {
                     // TODO actually fix this somehow
                     log::warn!("recovered more than one memtable via WAL that were not in process of flushing - this could lead to invalid recovery state");
                 }
+
                 memtable.into_iter().for_each(|(k, v)| {
-                    recovery_wal.write(&k, Some(v.as_ref().unwrap())).unwrap();
+                    if v.is_none() {
+                        recovery_wal.write(&k, None).unwrap();
+                    } else {
+                        recovery_wal.write(&k, Some(v.as_ref().unwrap())).unwrap();
+                    }
                     writable_memtable.insert(k, v);
                 });
                 fs::remove_file(path)?;
@@ -173,26 +192,40 @@ fn recover_memtable(path: &path::Path) -> io::Result<memtable::Memtable> {
             return Ok(memtable);
         }
 
+        let flags_1 = flags_1_o.unwrap()?;
+        let delete = flags_1 & (1 << 6) > 0;
+
         let key_length = ((bytes.next().unwrap()? as u32) << 24)
             + ((bytes.next().unwrap()? as u32) << 16)
             + ((bytes.next().unwrap()? as u32) << 8)
             + (bytes.next().unwrap()? as u32);
 
-        let value_length = ((bytes.next().unwrap()? as u32) << 24)
-            + ((bytes.next().unwrap()? as u32) << 16)
-            + ((bytes.next().unwrap()? as u32) << 8)
-            + (bytes.next().unwrap()? as u32);
+        let mut value_length = 0;
+        if !delete {
+            value_length = ((bytes.next().unwrap()? as u32) << 24)
+                + ((bytes.next().unwrap()? as u32) << 16)
+                + ((bytes.next().unwrap()? as u32) << 8)
+                + (bytes.next().unwrap()? as u32);
+        }
 
         let mut key: Vec<u8> = Vec::with_capacity(key_length as usize);
         for _ in 0..key_length {
             key.push(bytes.next().unwrap()?);
         }
 
-        let mut value = Vec::with_capacity(value_length as usize);
-        for _ in 0..value_length {
-            value.push(bytes.next().unwrap()?);
+
+        let mut value = vec![];
+        if !delete {
+            value = Vec::with_capacity(value_length as usize);
+            for _ in 0..value_length {
+                value.push(bytes.next().unwrap()?);
+            }
         }
 
-        memtable.insert(key, Some(value));
+        if delete {
+            memtable.insert(key, None);
+        } else {
+            memtable.insert(key, Some(value));
+        }
     }
 }

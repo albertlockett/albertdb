@@ -106,8 +106,6 @@ impl Engine {
         self.writable_table
             .insert(key.to_vec(), Some(value.to_vec()));
 
-        println!("{:?}", self.writable_table.size());
-
         // TODO memtable size needs to be configurable
         if self.writable_table.size() > 3 {
             self.flush_writable_memtable();
@@ -115,12 +113,8 @@ impl Engine {
     }
 
     pub fn delete(&mut self, key: &[u8]) {
-        // TODO uncomment below
-        // self.writable_wal.write(key, Some(value)).unwrap();
-
+        self.writable_wal.write(key, None).unwrap();
         self.writable_table.insert(key.to_vec(), None);
-
-        println!("{:?}", self.writable_table.size());
 
         // TODO memtable size needs to be configurable
         if self.writable_table.size() > 3 {

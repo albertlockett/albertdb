@@ -143,6 +143,7 @@ impl NodeStuff for Arc<RwLock<Node>> {
 
     fn search(&self, key: &Vec<u8>) -> Option<Vec<u8>> {
         if self.read().unwrap().key == *key {
+            println!("there is value");
             return self.read().unwrap().value.clone();
         }
 
@@ -228,7 +229,6 @@ impl Memtable {
             let node = node_link.as_ref().unwrap().clone();
             parent_link = Some(node.clone());
 
-            println!("{:?}, {:?}", key, node.read().unwrap().key);
             if key == node.read().unwrap().key {
                 replace = true;
                 break;

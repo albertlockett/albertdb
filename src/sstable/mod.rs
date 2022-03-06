@@ -76,7 +76,7 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
 
             let mut flags: u8 = 0;
             if deleted {
-                flags += 1 << 7;
+                flags += 1 << 6;
             }
 
             Entry {
