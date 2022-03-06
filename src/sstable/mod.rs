@@ -111,8 +111,6 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
 
     for entry in &entries {
         encoder.write(&[entry.flags])?;
-        current_block.count += 1;
-
         encoder.write(&[
             (entry.key_length >> 24) as u8,
             (entry.key_length >> 16) as u8,
@@ -120,8 +118,6 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
             entry.key_length as u8,
         ])?;
         encoder.write(&entry.key)?;
-        current_block.size += entry.key_length;
-
         if !entry.deleted {
             encoder.write(&[
                 (entry.value_length >> 24) as u8,
@@ -130,11 +126,16 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
                 entry.value_length as u8,
             ])?;
             encoder.write(&entry.value)?;
-            current_block.size += entry.value_length;
         }
 
         if current_block.count == 0 {
             current_block.start_key = entry.key.clone();
+        }
+
+        current_block.count += 1;
+        current_block.size += entry.key_length;
+        if !entry.deleted {
+            current_block.size += entry.value_length;
         }
 
         // flush compressed block
@@ -195,7 +196,6 @@ mod flush_to_sstable_tests {
         m.insert("abc".bytes().collect(), Some("abc".bytes().collect()));
         m.insert("def".bytes().collect(), Some("dev".bytes().collect()));
         let result = flush_to_sstable(&m);
-        println!("{:?} {:?}", m, result);
     }
 }
 

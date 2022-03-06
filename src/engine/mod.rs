@@ -141,32 +141,38 @@ impl Engine {
 
     pub fn find(&self, key: &[u8]) -> Option<Vec<u8>> {
         log::debug!("searching for key {:?}", key);
-        let found = self.writable_table.search(key);
-        if found.is_some() {
+        let (val_found, found) = self.writable_table.search(key);
+        if val_found.is_some() {
             if log::log_enabled!(log::Level::Debug) {
                 log::debug!(
                     "found '{:?}' in writable memtable (id: {}). value: '{:?}'",
                     key,
                     self.writable_table.id,
-                    found.as_ref().unwrap()
+                    val_found.as_ref().unwrap()
                 );
             }
-            return found;
+            return val_found;
         };
+        if found {
+            return None;
+        }
 
         let mts: &Vec<Arc<memtable::Memtable>> = &self.flushing_memtables.read().unwrap();
         for mt in mts {
-            let found = mt.search(&key);
-            if found.is_some() {
+            let (val_found, found) = mt.search(&key);
+            if val_found.is_some() {
                 if log::log_enabled!(log::Level::Debug) {
                     log::debug!(
                         "found '{:?}' in flushing memtable (id: {}). value: '{:?}'",
                         key,
                         mt.id,
-                        found.as_ref().unwrap()
+                        val_found.as_ref().unwrap()
                     );
                 }
-                return found;
+                return val_found;
+            }
+            if found {
+                return None
             }
         }
 

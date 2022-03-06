@@ -85,7 +85,6 @@ impl Wal {
         let mut bytes = file.bytes();
         // TODO implement the full readback
         let g = bytes.next();
-        println!("{:?}", g);
         return Ok(true);
     }
 

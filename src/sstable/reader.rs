@@ -45,6 +45,18 @@ impl Reader {
             }
         }
 
+        // make sure the sstables are ordered newest to oldest
+        self.sstables.sort_by(|a, b| {
+            let (a_meta, _1) = a;
+            let (b_meta, _2) = b;
+
+            if a_meta.timestamp > b_meta.timestamp {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
+            }
+        });
+
         log::info!("initialized with {} memtables", self.sstables.len());
     }
 
@@ -58,11 +70,14 @@ impl Reader {
             log::debug!("searching for '{:?}' in '{:?}", key, path);
             let result = find_from_table(key, path, &table_meta.blocks[block.unwrap()]);
             match result {
-                Ok(Some(entry)) => {
+                Ok((Some(entry), _)) => {
                     log::debug!("found '{:?}' in '{:?}", key, path);
                     return Some(entry.value);
                 }
-                Ok(None) => {
+                Ok((None, true)) => {
+                    return None
+                }
+                Ok((None, false)) => {
                     log::debug!("not found '{:?}' in '{:?}", key, path);
                     // skip - could debug log?
                 }
@@ -86,6 +101,8 @@ impl Reader {
             table_meta.blocks.len(),
             self.sstables.len() + 1,
         );
+
+        // TODO need to re-sort sstable
         self.sstables.push((table_meta, path));
     }
 }
@@ -140,14 +157,14 @@ fn find_from_table(
     search_key: &[u8],
     path: &path::Path,
     block: &BlockMeta,
-) -> io::Result<Option<Entry>> {
+) -> io::Result<(Option<Entry>, bool)> {
     let bytes1 = deserialize_block(path, block)?;
     let mut bytes = bytes1.into_iter().map(|b| Ok::<u8, io::Error>(b));
 
     loop {
         let flags_1_option = bytes.next();
         if flags_1_option.is_none() {
-            return Ok(None);
+            return Ok((None, false));
         }
 
         let flags_1 = flags_1_option.unwrap()?;
@@ -174,7 +191,7 @@ fn find_from_table(
         // if key matches, return result
         if &key == search_key {
             if deleted {
-                return Ok(None);
+                return Ok((None, true));
             }
 
             let mut value = Vec::with_capacity(value_length as usize);
@@ -182,14 +199,14 @@ fn find_from_table(
                 value.push(bytes.next().unwrap()?);
             }
 
-            return Ok(Some(Entry {
+            return Ok((Some(Entry {
                 flags: 0,
                 key_length,
                 key,
                 value_length,
                 value,
                 deleted,
-            }));
+            }), true));
         }
 
         // skip over the value

@@ -35,7 +35,7 @@ pub trait NodeStuff {
 
     fn is_heap_invariant(&self) -> bool;
 
-    fn search(&self, key: &Vec<u8>) -> Option<Vec<u8>>;
+    fn search(&self, key: &Vec<u8>) -> (Option<Vec<u8>>, bool);
 }
 
 impl std::fmt::Debug for Node {
@@ -141,10 +141,9 @@ impl NodeStuff for Arc<RwLock<Node>> {
         return self.read().unwrap().priority > parent.read().unwrap().priority;
     }
 
-    fn search(&self, key: &Vec<u8>) -> Option<Vec<u8>> {
+    fn search(&self, key: &Vec<u8>) -> (Option<Vec<u8>>, bool) {
         if self.read().unwrap().key == *key {
-            println!("there is value");
-            return self.read().unwrap().value.clone();
+            return (self.read().unwrap().value.clone(), true);
         }
 
         let has_left = !matches!(self.get_left(), None);
@@ -157,7 +156,7 @@ impl NodeStuff for Arc<RwLock<Node>> {
             return self.get_right().unwrap().search(key);
         }
 
-        return None;
+        return (None, false);
     }
 }
 
@@ -187,17 +186,17 @@ impl Memtable {
         return self.size;
     }
 
-    pub fn search(&self, key: &[u8]) -> Option<Vec<u8>> {
+    pub fn search(&self, key: &[u8]) -> (Option<Vec<u8>>, bool) {
         if matches!(self.root, None) {
-            return None;
+            return (None, false);
         }
 
         let node = self.root.as_ref().unwrap();
-        let value = node.search(&key.to_vec());
+        let (value, found) = node.search(&key.to_vec());
         if value.is_some() {
-            return Some(value.unwrap());
+            return (Some(value.unwrap()), true);
         }
-        return None;
+        return (None, found);
     }
 
     // TODO
@@ -240,7 +239,6 @@ impl Memtable {
         }
 
         if replace {
-            println!("replicaing");
             std::mem::swap(&mut value, &mut parent_link.unwrap().write().unwrap().value);
             return;
         }
@@ -254,7 +252,6 @@ impl Memtable {
             parent: None,
         }));
 
-        println!("not replicatin");
         self.size += 1;
         let parent = parent_link.as_ref().unwrap().clone();
         if parent.read().unwrap().key <= new_node.read().unwrap().key {
