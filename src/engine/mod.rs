@@ -172,7 +172,7 @@ impl Engine {
                 return val_found;
             }
             if found {
-                return None
+                return None;
             }
         }
 

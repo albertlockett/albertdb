@@ -16,7 +16,9 @@ pub struct Reader {
 
 impl Reader {
     pub fn new() -> Self {
-        Reader { sstables: VecDeque::new() }
+        Reader {
+            sstables: VecDeque::new(),
+        }
     }
 
     // this scans the sstable directory for sstables
@@ -25,8 +27,8 @@ impl Reader {
     // - try to ignore files called sstables, that aren't sstables (could do this by checking metadata)
     pub fn init(&mut self) {
         log::info!("initializing sstable reader");
-        let data_dir = "/tmp"; // TODO not have hard 
-        
+        let data_dir = "/tmp"; // TODO not have hard
+
         let mut sstables = vec![];
         for file in fs::read_dir(data_dir).unwrap() {
             let path: Box<path::Path> = file.unwrap().path().into_boxed_path();
@@ -81,9 +83,7 @@ impl Reader {
                     log::debug!("found '{:?}' in '{:?}", key, path);
                     return Some(entry.value);
                 }
-                Ok((None, true)) => {
-                    return None
-                }
+                Ok((None, true)) => return None,
                 Ok((None, false)) => {
                     log::debug!("not found '{:?}' in '{:?}", key, path);
                     // skip - could debug log?
@@ -206,14 +206,17 @@ fn find_from_table(
                 value.push(bytes.next().unwrap()?);
             }
 
-            return Ok((Some(Entry {
-                flags: 0,
-                key_length,
-                key,
-                value_length,
-                value,
-                deleted,
-            }), true));
+            return Ok((
+                Some(Entry {
+                    flags: 0,
+                    key_length,
+                    key,
+                    value_length,
+                    value,
+                    deleted,
+                }),
+                true,
+            ));
         }
 
         // skip over the value

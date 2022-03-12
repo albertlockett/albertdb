@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-
 pub struct Node {
     key: Vec<u8>,
     value: Option<Vec<u8>>,
@@ -206,8 +205,12 @@ impl Memtable {
         self.insert_with_priority(priority, key, value);
     }
 
-    pub fn insert_with_priority(&mut self, priority: f64, key: Vec<u8>, mut value: Option<Vec<u8>>) {
-
+    pub fn insert_with_priority(
+        &mut self,
+        priority: f64,
+        key: Vec<u8>,
+        mut value: Option<Vec<u8>>,
+    ) {
         // oops the tree is empty - new node is the root
         if matches!(self.root, None) {
             let new_node = Arc::new(RwLock::new(Node {
@@ -273,8 +276,6 @@ impl Memtable {
             }
         }
     }
-
-
 
     fn rotate_left(&mut self, x: &mut Arc<RwLock<Node>>) {
         if matches!(x.get_parent(), None) {
@@ -344,7 +345,6 @@ impl Memtable {
     }
 }
 
-
 #[cfg(test)]
 mod memtable_tests {
     use super::*;
@@ -364,7 +364,7 @@ mod memtable_tests {
         assert_eq!(0, memtable.size());
         memtable.insert(
             String::from("guy").into_bytes(),
-            Some(String::from("tim").into_bytes())
+            Some(String::from("tim").into_bytes()),
         );
         assert_eq!(1, memtable.size());
         let (val_o, found) = memtable.search(&"guy".as_bytes());
@@ -386,25 +386,25 @@ mod memtable_tests {
         assert_eq!(0, memtable.size());
         memtable.insert(
             String::from("a").into_bytes(),
-            Some(String::from("1").into_bytes())
+            Some(String::from("1").into_bytes()),
         );
         assert_eq!(1, memtable.size());
 
         memtable.insert(
             String::from("b").into_bytes(),
-            Some(String::from("2").into_bytes())
+            Some(String::from("2").into_bytes()),
         );
         assert_eq!(2, memtable.size());
 
         memtable.insert(
             String::from("c").into_bytes(),
-            Some(String::from("3").into_bytes())
+            Some(String::from("3").into_bytes()),
         );
         assert_eq!(3, memtable.size());
 
         memtable.insert(
             String::from("d").into_bytes(),
-            Some(String::from("4").into_bytes())
+            Some(String::from("4").into_bytes()),
         );
         assert_eq!(4, memtable.size());
 
@@ -431,25 +431,25 @@ mod memtable_tests {
         // ensure we can update all the values
         memtable.insert(
             String::from("a").into_bytes(),
-            Some(String::from("5").into_bytes())
+            Some(String::from("5").into_bytes()),
         );
         assert_eq!(4, memtable.size());
 
         memtable.insert(
             String::from("b").into_bytes(),
-            Some(String::from("6").into_bytes())
+            Some(String::from("6").into_bytes()),
         );
         assert_eq!(4, memtable.size());
 
         memtable.insert(
             String::from("c").into_bytes(),
-            Some(String::from("7").into_bytes())
+            Some(String::from("7").into_bytes()),
         );
         assert_eq!(4, memtable.size());
 
         memtable.insert(
             String::from("d").into_bytes(),
-            Some(String::from("8").into_bytes())
+            Some(String::from("8").into_bytes()),
         );
         assert_eq!(4, memtable.size());
 
@@ -474,27 +474,27 @@ mod memtable_tests {
         assert_eq!(found, true);
 
         // ensure can delete all the values
-        memtable.insert(String::from("a").into_bytes(),None);
+        memtable.insert(String::from("a").into_bytes(), None);
         assert_eq!(4, memtable.size());
         let (val_o, found) = memtable.search(&"a".as_bytes());
         assert_eq!(val_o.is_none(), true);
         assert_eq!(found, true);
 
-        memtable.insert(String::from("b").into_bytes(),None);
-        assert_eq!(4, memtable.size());
-        assert_eq!(4, memtable.size());
-        let (val_o, found) = memtable.search(&"a".as_bytes());
-        assert_eq!(val_o.is_none(), true);
-        assert_eq!(found, true);
-
-        memtable.insert(String::from("c").into_bytes(),None);
+        memtable.insert(String::from("b").into_bytes(), None);
         assert_eq!(4, memtable.size());
         assert_eq!(4, memtable.size());
         let (val_o, found) = memtable.search(&"a".as_bytes());
         assert_eq!(val_o.is_none(), true);
         assert_eq!(found, true);
 
-        memtable.insert(String::from("d").into_bytes(),None);
+        memtable.insert(String::from("c").into_bytes(), None);
+        assert_eq!(4, memtable.size());
+        assert_eq!(4, memtable.size());
+        let (val_o, found) = memtable.search(&"a".as_bytes());
+        assert_eq!(val_o.is_none(), true);
+        assert_eq!(found, true);
+
+        memtable.insert(String::from("d").into_bytes(), None);
         assert_eq!(4, memtable.size());
         assert_eq!(4, memtable.size());
         let (val_o, found) = memtable.search(&"a".as_bytes());
@@ -502,7 +502,6 @@ mod memtable_tests {
         assert_eq!(found, true);
     }
 }
-
 
 #[cfg(test)]
 mod insert_tests {
@@ -544,12 +543,19 @@ mod insert_tests {
         y.set_left(Some(x.clone()));
         x.set_parent(Some(y.clone()));
 
-        m.insert_with_priority(45f64, String::from("35").into_bytes(), Some(String::from("45").into_bytes()));
+        m.insert_with_priority(
+            45f64,
+            String::from("35").into_bytes(),
+            Some(String::from("45").into_bytes()),
+        );
 
         assert_eq!(true, Arc::ptr_eq(&p, m.root.as_ref().unwrap()));
 
         let new_node = p.get_left().unwrap().clone();
-        assert_eq!(String::from("35").into_bytes(), new_node.read().unwrap().key);
+        assert_eq!(
+            String::from("35").into_bytes(),
+            new_node.read().unwrap().key
+        );
 
         assert_eq!(true, new_node.is_left_child(Some(x.clone())));
         assert_eq!(true, x.is_parent(Some(new_node.clone())));
@@ -559,38 +565,41 @@ mod insert_tests {
     }
 }
 
-/*
 #[cfg(test)]
 mod rotate_left_tests {
     use super::*;
 
     #[test]
     fn test_rotate_left_full_rotation() {
-        let mut m = Memtable::<i32, i32>::new();
-        let p = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 0,
-            priority: 0,
+        let mut m = Memtable::new();
+        let p = Arc::new(RwLock::new(Node {
+            key: String::from("0").into_bytes(),
+            value: Some(String::from("0").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let y = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 1,
-            priority: 0,
+        let y = Arc::new(RwLock::new(Node {
+            key: String::from("1").into_bytes(),
+            value: Some(String::from("1").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 2,
-            priority: 0,
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("2").into_bytes(),
+            value: Some(String::from("2").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x_left = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 3,
-            priority: 0,
+        let x_left = Arc::new(RwLock::new(Node {
+            key: String::from("3").into_bytes(),
+            value: Some(String::from("3").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
@@ -629,31 +638,35 @@ mod rotate_left_tests {
 
     #[test]
     fn test_rotate_left_full_y_is_left_child_of_p() {
-        let mut m = Memtable::<i32, i32>::new();
-        let p = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 0,
-            priority: 0,
+        let mut m = Memtable::new();
+        let p = Arc::new(RwLock::new(Node {
+            key: String::from("0").into_bytes(),
+            value: Some(String::from("0").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let y = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 1,
-            priority: 0,
+        let y = Arc::new(RwLock::new(Node {
+            key: String::from("1").into_bytes(),
+            value: Some(String::from("1").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 2,
-            priority: 0,
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("2").into_bytes(),
+            value: Some(String::from("2").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x_left = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 3,
-            priority: 0,
+        let x_left = Arc::new(RwLock::new(Node {
+            key: String::from("3").into_bytes(),
+            value: Some(String::from("3").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
@@ -692,18 +705,19 @@ mod rotate_left_tests {
 
     #[test]
     fn test_rotate_left_parent_is_root() {
-        let mut m = Memtable::<i32, i32>::new();
-        let p = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 0,
-            priority: 0,
+        let mut m = Memtable::new();
+        let p = Arc::new(RwLock::new(Node {
+            key: String::from("0").into_bytes(),
+            value: Some(String::from("0").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-
-        let x = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 2,
-            priority: 0,
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("2").into_bytes(),
+            value: Some(String::from("2").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
@@ -727,10 +741,11 @@ mod rotate_left_tests {
     #[test]
     #[should_panic]
     fn test_rotate_left_panics_if_x_is_root() {
-        let mut m = Memtable::<i32, i32>::new();
-        let x = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 0,
-            priority: 0,
+        let mut m = Memtable::new();
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("0").into_bytes(),
+            value: Some(String::from("0").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
@@ -742,18 +757,20 @@ mod rotate_left_tests {
     #[test]
     #[should_panic]
     fn test_rotate_left_panics_if_x_is_left_child() {
-        let mut m = Memtable::<i32, i32>::new();
-        let p = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 0,
-            priority: 0,
+        let mut m = Memtable::new();
+        let p = Arc::new(RwLock::new(Node {
+            key: String::from("0").into_bytes(),
+            value: Some(String::from("0").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
 
-        let x = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 2,
-            priority: 0,
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("2").into_bytes(),
+            value: Some(String::from("2").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
@@ -773,10 +790,11 @@ mod rotate_right_tests {
     #[test]
     #[should_panic]
     fn panics_if_x_is_root() {
-        let mut m = Memtable::<i32, i32>::new();
-        let x = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 0,
-            priority: 0,
+        let mut m = Memtable::new();
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("2").into_bytes(),
+            value: Some(String::from("2").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
@@ -788,17 +806,20 @@ mod rotate_right_tests {
     #[test]
     #[should_panic]
     fn panics_if_x_is_right_child() {
-        let mut m = Memtable::<i32, i32>::new();
-        let p = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 0,
-            priority: 0,
+        let mut m = Memtable::new();
+        let p = Arc::new(RwLock::new(Node {
+            key: String::from("0").into_bytes(),
+            value: Some(String::from("0").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 1,
-            priority: 2,
+
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("2").into_bytes(),
+            value: Some(String::from("2").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
@@ -813,17 +834,20 @@ mod rotate_right_tests {
 
     #[test]
     fn handles_case_where_x_parent_is_root() {
-        let mut m = Memtable::<i32, i32>::new();
-        let p = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 0,
-            priority: 0,
+        let mut m = Memtable::new();
+        let p = Arc::new(RwLock::new(Node {
+            key: String::from("0").into_bytes(),
+            value: Some(String::from("0").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 1,
-            priority: 2,
+
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("2").into_bytes(),
+            value: Some(String::from("2").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
@@ -846,31 +870,35 @@ mod rotate_right_tests {
 
     #[test]
     fn full_rotate_y_is_p_right_child() {
-        let mut m = Memtable::<i32, i32>::new();
-        let p = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 0,
-            priority: 0,
+        let mut m = Memtable::new();
+        let p = Arc::new(RwLock::new(Node {
+            key: String::from("0").into_bytes(),
+            value: Some(String::from("0").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let y = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 1,
-            priority: 1,
+        let y = Arc::new(RwLock::new(Node {
+            key: String::from("1").into_bytes(),
+            value: Some(String::from("1").into_bytes()),
+            priority: 1f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 2,
-            priority: 2,
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("2").into_bytes(),
+            value: Some(String::from("2").into_bytes()),
+            priority: 2f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x_right = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 3,
-            priority: 3,
+        let x_right = Arc::new(RwLock::new(Node {
+            key: String::from("3").into_bytes(),
+            value: Some(String::from("3").into_bytes()),
+            priority: 3f64,
             left: None,
             right: None,
             parent: None,
@@ -901,31 +929,35 @@ mod rotate_right_tests {
 
     #[test]
     fn full_rotate_y_is_p_left_child() {
-        let mut m = Memtable::<i32, i32>::new();
-        let p = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 0,
-            priority: 0,
+        let mut m = Memtable::new();
+        let p = Arc::new(RwLock::new(Node {
+            key: String::from("0").into_bytes(),
+            value: Some(String::from("0").into_bytes()),
+            priority: 0f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let y = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 1,
-            priority: 1,
+        let y = Arc::new(RwLock::new(Node {
+            key: String::from("1").into_bytes(),
+            value: Some(String::from("1").into_bytes()),
+            priority: 1f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 2,
-            priority: 2,
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("2").into_bytes(),
+            value: Some(String::from("2").into_bytes()),
+            priority: 2f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x_right = Arc::new(RefCell::new(Node::<i32, i32> {
-            key: 3,
-            priority: 3,
+        let x_right = Arc::new(RwLock::new(Node {
+            key: String::from("3").into_bytes(),
+            value: Some(String::from("3").into_bytes()),
+            priority: 3f64,
             left: None,
             right: None,
             parent: None,
@@ -954,7 +986,7 @@ mod rotate_right_tests {
         assert_eq!(true, x_right.is_parent(Some(y.clone())));
     }
 }
-*/
+
 #[derive(Debug)]
 pub struct MemtableIterator {
     unvisited: Vec<Link>,

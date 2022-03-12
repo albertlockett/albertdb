@@ -38,7 +38,7 @@ impl Wal {
             key_length: key.len() as u32,
             key: key.to_owned(),
             value_length: 0,
-            value: vec![]
+            value: vec![],
         };
 
         if value.is_none() {
@@ -201,7 +201,6 @@ fn recover_memtable(path: &path::Path) -> io::Result<memtable::Memtable> {
         for _ in 0..key_length {
             key.push(bytes.next().unwrap()?);
         }
-
 
         let mut value = vec![];
         if !delete {
