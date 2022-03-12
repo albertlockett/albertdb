@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+
 pub struct Node {
     key: Vec<u8>,
     value: Option<Vec<u8>>,
@@ -199,11 +200,13 @@ impl Memtable {
         return (None, found);
     }
 
-    // TODO
-    // - TODO insert should replace the value vec if the key already exists
-    pub fn insert(&mut self, key: Vec<u8>, mut value: Option<Vec<u8>>) {
+    pub fn insert(&mut self, key: Vec<u8>, value: Option<Vec<u8>>) {
         let mut rng = rand::thread_rng();
         let priority: f64 = rng.gen();
+        self.insert_with_priority(priority, key, value);
+    }
+
+    pub fn insert_with_priority(&mut self, priority: f64, key: Vec<u8>, mut value: Option<Vec<u8>>) {
 
         // oops the tree is empty - new node is the root
         if matches!(self.root, None) {
@@ -270,6 +273,8 @@ impl Memtable {
             }
         }
     }
+
+
 
     fn rotate_left(&mut self, x: &mut Arc<RwLock<Node>>) {
         if matches!(x.get_parent(), None) {
@@ -339,73 +344,193 @@ impl Memtable {
     }
 }
 
-/*
+
 #[cfg(test)]
-mod search_tests {
+mod memtable_tests {
     use super::*;
 
     #[test]
-    fn test_it_can_search_find() {
-        let mut m = Memtable::<i32, i32> { root: None };
-        m.insert(3, 4);
-        assert_eq!(true, m.search(&3));
+    fn it_returns_false_if_empty() {
+        let memtable = Memtable::new();
+        let (val, found) = memtable.search(&"albert".as_bytes());
+        assert_eq!(0, memtable.size());
+        assert_eq!(val, None);
+        assert_eq!(found, false);
     }
 
     #[test]
-    fn test_it_can_search_if_not_in_tree() {
-        let mut m = Memtable::<i32, i32> { root: None };
-        m.insert(3, 0);
-        assert_eq!(false, m.search(&2));
+    fn it_can_find_and_delete_the_root_value() {
+        let mut memtable = Memtable::new();
+        assert_eq!(0, memtable.size());
+        memtable.insert(
+            String::from("guy").into_bytes(),
+            Some(String::from("tim").into_bytes())
+        );
+        assert_eq!(1, memtable.size());
+        let (val_o, found) = memtable.search(&"guy".as_bytes());
+        assert_eq!(val_o.is_some(), true);
+        let val = val_o.unwrap();
+        assert_eq!(val, String::from("tim").into_bytes());
+        assert_eq!(found, true);
+
+        memtable.insert(String::from("guy").into_bytes(), None);
+        assert_eq!(1, memtable.size());
+        let (val_o, found) = memtable.search(&"guy".as_bytes());
+        assert_eq!(val_o, None);
+        assert_eq!(found, true);
     }
 
     #[test]
-    fn test_it_can_search_nested_find_yes() {
-        let mut m = Memtable::<u32, u32> { root: None };
-        m.insert(3, 3);
-        m.insert(2, 2);
-        m.insert(1, 1);
-        assert_eq!(true, m.search(&1));
-    }
+    fn it_can_put_many_children_in_itself() {
+        let mut memtable = Memtable::new();
+        assert_eq!(0, memtable.size());
+        memtable.insert(
+            String::from("a").into_bytes(),
+            Some(String::from("1").into_bytes())
+        );
+        assert_eq!(1, memtable.size());
 
-    #[test]
-    fn test_it_can_search_nested_find_not_in_tree() {
-        let mut m = Memtable::<u32, u32> { root: None };
-        m.insert(3, 3);
-        m.insert(2, 2);
-        m.insert(1, 1);
-        assert_eq!(false, m.search(&0));
+        memtable.insert(
+            String::from("b").into_bytes(),
+            Some(String::from("2").into_bytes())
+        );
+        assert_eq!(2, memtable.size());
+
+        memtable.insert(
+            String::from("c").into_bytes(),
+            Some(String::from("3").into_bytes())
+        );
+        assert_eq!(3, memtable.size());
+
+        memtable.insert(
+            String::from("d").into_bytes(),
+            Some(String::from("4").into_bytes())
+        );
+        assert_eq!(4, memtable.size());
+
+        let (val_o, found) = memtable.search(&"a".as_bytes());
+        assert_eq!(val_o.is_some(), true);
+        assert_eq!(val_o.unwrap(), String::from("1").as_bytes());
+        assert_eq!(found, true);
+
+        let (val_o, found) = memtable.search(&"b".as_bytes());
+        assert_eq!(val_o.is_some(), true);
+        assert_eq!(val_o.unwrap(), String::from("2").as_bytes());
+        assert_eq!(found, true);
+
+        let (val_o, found) = memtable.search(&"c".as_bytes());
+        assert_eq!(val_o.is_some(), true);
+        assert_eq!(val_o.unwrap(), String::from("3").as_bytes());
+        assert_eq!(found, true);
+
+        let (val_o, found) = memtable.search(&"d".as_bytes());
+        assert_eq!(val_o.is_some(), true);
+        assert_eq!(val_o.unwrap(), String::from("4").as_bytes());
+        assert_eq!(found, true);
+
+        // ensure we can update all the values
+        memtable.insert(
+            String::from("a").into_bytes(),
+            Some(String::from("5").into_bytes())
+        );
+        assert_eq!(4, memtable.size());
+
+        memtable.insert(
+            String::from("b").into_bytes(),
+            Some(String::from("6").into_bytes())
+        );
+        assert_eq!(4, memtable.size());
+
+        memtable.insert(
+            String::from("c").into_bytes(),
+            Some(String::from("7").into_bytes())
+        );
+        assert_eq!(4, memtable.size());
+
+        memtable.insert(
+            String::from("d").into_bytes(),
+            Some(String::from("8").into_bytes())
+        );
+        assert_eq!(4, memtable.size());
+
+        let (val_o, found) = memtable.search(&"a".as_bytes());
+        assert_eq!(val_o.is_some(), true);
+        assert_eq!(val_o.unwrap(), String::from("5").as_bytes());
+        assert_eq!(found, true);
+
+        let (val_o, found) = memtable.search(&"b".as_bytes());
+        assert_eq!(val_o.is_some(), true);
+        assert_eq!(val_o.unwrap(), String::from("6").as_bytes());
+        assert_eq!(found, true);
+
+        let (val_o, found) = memtable.search(&"c".as_bytes());
+        assert_eq!(val_o.is_some(), true);
+        assert_eq!(val_o.unwrap(), String::from("7").as_bytes());
+        assert_eq!(found, true);
+
+        let (val_o, found) = memtable.search(&"d".as_bytes());
+        assert_eq!(val_o.is_some(), true);
+        assert_eq!(val_o.unwrap(), String::from("8").as_bytes());
+        assert_eq!(found, true);
+
+        // ensure can delete all the values
+        memtable.insert(String::from("a").into_bytes(),None);
+        assert_eq!(4, memtable.size());
+        let (val_o, found) = memtable.search(&"a".as_bytes());
+        assert_eq!(val_o.is_none(), true);
+        assert_eq!(found, true);
+
+        memtable.insert(String::from("b").into_bytes(),None);
+        assert_eq!(4, memtable.size());
+        assert_eq!(4, memtable.size());
+        let (val_o, found) = memtable.search(&"a".as_bytes());
+        assert_eq!(val_o.is_none(), true);
+        assert_eq!(found, true);
+
+        memtable.insert(String::from("c").into_bytes(),None);
+        assert_eq!(4, memtable.size());
+        assert_eq!(4, memtable.size());
+        let (val_o, found) = memtable.search(&"a".as_bytes());
+        assert_eq!(val_o.is_none(), true);
+        assert_eq!(found, true);
+
+        memtable.insert(String::from("d").into_bytes(),None);
+        assert_eq!(4, memtable.size());
+        assert_eq!(4, memtable.size());
+        let (val_o, found) = memtable.search(&"a".as_bytes());
+        assert_eq!(val_o.is_none(), true);
+        assert_eq!(found, true);
     }
 }
+
 
 #[cfg(test)]
 mod insert_tests {
     use super::*;
 
     #[test]
-    fn test_insert_to_root() {
-        // TODO
-    }
-
-    #[test]
     fn test_insert_some_rotations() {
-        let mut m = Memtable::<u32, u32> { root: None };
-        let p = Arc::new(RefCell::new(Node {
-            key: 50,
-            priority: 50,
+        let mut m = Memtable::new();
+        let p = Arc::new(RwLock::new(Node {
+            key: String::from("50").into_bytes(),
+            value: Some(String::from("50").into_bytes()),
+            priority: 50f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let y = Arc::new(RefCell::new(Node {
-            key: 40,
-            priority: 40,
+        let y = Arc::new(RwLock::new(Node {
+            key: String::from("40").into_bytes(),
+            value: Some(String::from("40").into_bytes()),
+            priority: 40f64,
             left: None,
             right: None,
             parent: None,
         }));
-        let x = Arc::new(RefCell::new(Node {
-            key: 30,
-            priority: 30,
+        let x = Arc::new(RwLock::new(Node {
+            key: String::from("30").into_bytes(),
+            value: Some(String::from("30").into_bytes()),
+            priority: 30f64,
             left: None,
             right: None,
             parent: None,
@@ -419,12 +544,12 @@ mod insert_tests {
         y.set_left(Some(x.clone()));
         x.set_parent(Some(y.clone()));
 
-        m.insert(35, 45);
+        m.insert_with_priority(45f64, String::from("35").into_bytes(), Some(String::from("45").into_bytes()));
 
         assert_eq!(true, Arc::ptr_eq(&p, m.root.as_ref().unwrap()));
 
         let new_node = p.get_left().unwrap().clone();
-        assert_eq!(35, new_node.read().unwrap().key);
+        assert_eq!(String::from("35").into_bytes(), new_node.read().unwrap().key);
 
         assert_eq!(true, new_node.is_left_child(Some(x.clone())));
         assert_eq!(true, x.is_parent(Some(new_node.clone())));
@@ -434,6 +559,7 @@ mod insert_tests {
     }
 }
 
+/*
 #[cfg(test)]
 mod rotate_left_tests {
     use super::*;
