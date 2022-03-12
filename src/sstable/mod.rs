@@ -1,14 +1,15 @@
-use crate::memtable;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use log;
-
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
 use std::io::Write;
 use std::path;
 use std::time;
+
+use crate::config;
+use crate::memtable;
 
 pub mod reader;
 
@@ -52,8 +53,7 @@ struct BlockMeta {
 //
 // TODO
 // - comment about what this is doing
-// - delete the WAL
-pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
+pub fn flush_to_sstable(config: &config::Config, memtable: &memtable::Memtable) -> io::Result<u32> {
     log::info!(
         "flushing memtable id = {}, size = {}",
         memtable.id,
@@ -90,7 +90,7 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
         })
         .collect();
 
-    let filename = format!("/tmp/sstable-data-{}", memtable.id);
+    let filename = format!("{}/sstable-data-{}", config.data_dir, memtable.id);
     let path = path::Path::new(&filename);
     let mut file = fs::OpenOptions::new()
         .write(true)
@@ -105,7 +105,6 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
         start_offset: 0,
     };
 
-    let max_block_size_uncompressed = 20;
     let mut total_bytes_written = 0u32;
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
 
@@ -139,7 +138,7 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
         }
 
         // flush compressed block
-        if current_block.size > max_block_size_uncompressed {
+        if current_block.size >= config.sstable_block_size {
             let bytes: Vec<u8> = encoder.finish()?;
             current_block.size_compressed = bytes.len() as u32;
             log::debug!(
@@ -180,27 +179,17 @@ pub fn flush_to_sstable(memtable: &memtable::Memtable) -> io::Result<u32> {
     }
     file.flush()?;
 
-    flush_sstable_meta(memtable, &table_meta)?;
+    flush_sstable_meta(config, memtable, &table_meta)?;
 
     return Ok(1);
 }
 
-#[cfg(test)]
-mod flush_to_sstable_tests {
-    use super::*;
-    use crate::memtable;
-
-    #[test]
-    fn smoke_test() {
-        let mut m = memtable::Memtable::new();
-        m.insert("abc".bytes().collect(), Some("abc".bytes().collect()));
-        m.insert("def".bytes().collect(), Some("dev".bytes().collect()));
-        let result = flush_to_sstable(&m);
-    }
-}
-
-fn flush_sstable_meta(memtable: &memtable::Memtable, metadata: &TableMeta) -> io::Result<()> {
-    let filename = format!("/tmp/sstable-meta-{}", memtable.id);
+fn flush_sstable_meta(
+    config: &config::Config,
+    memtable: &memtable::Memtable,
+    metadata: &TableMeta,
+) -> io::Result<()> {
+    let filename = format!("{}/sstable-meta-{}", config.data_dir, memtable.id);
     let path = path::Path::new(&filename);
     let file = fs::OpenOptions::new()
         .write(true)
@@ -217,4 +206,81 @@ fn flush_sstable_meta(memtable: &memtable::Memtable, metadata: &TableMeta) -> io
         }
     };
     return Ok(());
+}
+
+#[cfg(test)]
+mod mod_tests {
+    use super::*;
+    use crate::memtable;
+
+    #[test]
+    fn smoke_test() {
+        let data_dir = "/tmp/sstable_tests/smoke_test";
+        fs::remove_dir_all(data_dir);
+        fs::create_dir_all(data_dir).unwrap();
+
+        let mut config = config::Config::new();
+        config.data_dir = String::from(data_dir);
+        config.sstable_block_size = 12;
+
+        let mut memtable = memtable::Memtable::new();
+        // block 1
+        memtable.insert("1bc".bytes().collect(), Some("abc".bytes().collect()));
+        memtable.insert("1ef".bytes().collect(), Some("def".bytes().collect()));
+
+        // block 2
+        memtable.insert("2bc".bytes().collect(), Some("abc".bytes().collect()));
+        memtable.insert("2ef".bytes().collect(), Some("def".bytes().collect()));
+
+        // block 3
+        memtable.insert("3bc".bytes().collect(), Some("abc".bytes().collect()));
+
+        let result = flush_to_sstable(&config, &memtable);
+
+        // expect result to be OK
+        assert_eq!(true, result.is_ok());
+
+        // expect there is both a data table a meta table
+        let data_meta_r = fs::metadata(format!("{}/sstable-data-{}", data_dir, memtable.id));
+        assert_eq!(true, data_meta_r.is_ok());
+        let data_meta = data_meta_r.unwrap();
+        assert_eq!(true, data_meta.len() > 0);
+
+        // expect there to me a metadata file
+        let meta_meta_r = fs::metadata(format!("{}/sstable-meta-{}", data_dir, memtable.id));
+        assert_eq!(true, meta_meta_r.is_ok());
+        let meta_meta = meta_meta_r.unwrap();
+        assert_eq!(true, meta_meta.len() > 0);
+
+        // read back the meta and assert on it's structure
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .open(path::Path::new(&format!(
+                "{}/sstable-meta-{}",
+                data_dir, memtable.id
+            )))
+            .unwrap();
+        let table_meta: TableMeta = serde_yaml::from_reader(file).unwrap();
+        assert_eq!(3, table_meta.blocks.len());
+
+        let block0 = &table_meta.blocks[0];
+        assert_eq!(2, block0.count);
+        assert_eq!(12, block0.size);
+        assert_eq!(String::from("1bc").into_bytes(), block0.start_key);
+        assert_eq!(0, block0.start_offset);
+
+        let block1 = &table_meta.blocks[1];
+        assert_eq!(2, block1.count);
+        assert_eq!(12, block1.size);
+        assert_eq!(String::from("2bc").into_bytes(), block1.start_key);
+        assert_eq!(40, block1.start_offset);
+
+        let block2 = &table_meta.blocks[2];
+        assert_eq!(1, block2.count);
+        assert_eq!(6, block2.size);
+        assert_eq!(String::from("3bc").into_bytes(), block2.start_key);
+        assert_eq!(80, block2.start_offset);
+
+        fs::remove_dir_all(data_dir).unwrap();
+    }
 }

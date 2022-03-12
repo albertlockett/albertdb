@@ -4,11 +4,13 @@ use std::sync::Arc;
 use std::sync::{Mutex, RwLock};
 use std::thread;
 
+use crate::config;
 use crate::memtable;
 use crate::sstable;
 use crate::wal;
 
 pub struct Engine {
+    config: config::Config,
     flush_sender: Mutex<mpsc::Sender<Arc<memtable::Memtable>>>,
     writable_table: memtable::Memtable,
     writable_wal: wal::Wal,
@@ -49,8 +51,11 @@ impl Engine {
         });
         let flushing_memtables_ptr = Arc::new(RwLock::new(flushing_memtables));
 
+        let config = config::Config::new();
+
         // finally create the engine
         let engine = Engine {
+            config: config.clone(),
             sstable_reader: sstable_reader_ptr.clone(),
             flushing_memtables: flushing_memtables_ptr.clone(),
             flush_sender: Mutex::new(flush_sender),
@@ -62,7 +67,7 @@ impl Engine {
         let _handle = thread::spawn(move || {
             while let Ok(value) = flush_receiver.recv() {
                 // flush the memtable
-                sstable::flush_to_sstable(&value).unwrap();
+                sstable::flush_to_sstable(&config, &value).unwrap();
 
                 // delete the WAL
                 let wal = wal::Wal::new(value.id.clone());
@@ -105,9 +110,7 @@ impl Engine {
         self.writable_wal.write(key, Some(value)).unwrap();
         self.writable_table
             .insert(key.to_vec(), Some(value.to_vec()));
-
-        // TODO memtable size needs to be configurable
-        if self.writable_table.size() > 3 {
+        if self.writable_table.size() > self.config.memtable_max_count {
             self.flush_writable_memtable();
         }
     }
@@ -115,9 +118,7 @@ impl Engine {
     pub fn delete(&mut self, key: &[u8]) {
         self.writable_wal.write(key, None).unwrap();
         self.writable_table.insert(key.to_vec(), None);
-
-        // TODO memtable size needs to be configurable
-        if self.writable_table.size() > 3 {
+        if self.writable_table.size() > self.config.memtable_max_count {
             self.flush_writable_memtable();
         }
     }
