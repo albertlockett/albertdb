@@ -9,6 +9,7 @@ use std::path;
 
 use super::{BlockMeta, Entry, TableMeta};
 use crate::memtable;
+use crate::config;
 
 pub struct Reader {
     sstables: VecDeque<(TableMeta, Box<path::Path>)>,
@@ -25,12 +26,11 @@ impl Reader {
     // TODO
     // - try to ignore half-way flushed sstables
     // - try to ignore files called sstables, that aren't sstables (could do this by checking metadata)
-    pub fn init(&mut self) {
+    pub fn init(&mut self, config: &config::Config) {
         log::info!("initializing sstable reader");
-        let data_dir = "/tmp"; // TODO not have hard
 
-        let mut sstables = vec![];
-        for file in fs::read_dir(data_dir).unwrap() {
+        let mut sstables = vec![];  
+        for file in fs::read_dir(&config.data_dir).unwrap() {
             let path: Box<path::Path> = file.unwrap().path().into_boxed_path();
             if is_sstable(&path) {
                 let meta_path = String::from(
@@ -243,7 +243,7 @@ fn find_block(search_key: &[u8], table_meta: &TableMeta) -> Option<usize> {
         if *search_key < **curr_key {
             if idx - min == 1 {
                 let prev_key = &table_meta.blocks[idx - 1].start_key;
-                if **prev_key < *search_key {
+                if **prev_key <= *search_key {
                     return Some(idx - 1);
                 } else {
                     return None;
@@ -255,7 +255,7 @@ fn find_block(search_key: &[u8], table_meta: &TableMeta) -> Option<usize> {
         } else {
             if idx >= table_meta.blocks.len() - 1 {
                 let last_key = &table_meta.blocks[table_meta.blocks.len() - 1].start_key;
-                if **last_key < *search_key {
+                if **last_key <= *search_key {
                     return Some(table_meta.blocks.len() - 1);
                 } else {
                     return None;
@@ -265,6 +265,91 @@ fn find_block(search_key: &[u8], table_meta: &TableMeta) -> Option<usize> {
             min = idx;
             idx = 1 + idx + (max - idx) / 2;
         }
+    }
+}
+
+#[cfg(test)]
+mod reader_tests {
+    use super::*;
+    use crate::sstable;
+
+    #[test]
+    fn smoke_test() {
+        let data_dir = "/tmp/sstable_reader_tests/smoke_test";
+        fs::remove_dir_all(data_dir);
+        fs::create_dir_all(data_dir).unwrap();
+
+        let mut config = config::Config::new();
+        config.data_dir = String::from(data_dir);
+        config.sstable_block_size = 12;
+
+        let mut memtable = memtable::Memtable::new();
+        // block 1
+        memtable.insert("1bc".bytes().collect(), Some("abc".bytes().collect()));
+        memtable.insert("1ef".bytes().collect(), Some("def".bytes().collect()));
+        // block 2
+        memtable.insert("2bc".bytes().collect(), Some("abc".bytes().collect()));
+        memtable.insert("2ef".bytes().collect(), Some("def".bytes().collect()));
+        // block 3
+        memtable.insert("3bc".bytes().collect(), Some("abc".bytes().collect()));
+        sstable::flush_to_sstable(&config, &memtable).unwrap();
+
+        let mut memtable = memtable::Memtable::new();
+        // block 1
+        memtable.insert("4bc".bytes().collect(), Some("abc".bytes().collect()));
+        memtable.insert("4ef".bytes().collect(), Some("def".bytes().collect()));
+        // block 2
+        memtable.insert("5bc".bytes().collect(), Some("abc".bytes().collect()));
+        memtable.insert("5ef".bytes().collect(), Some("def".bytes().collect()));
+        // block 3
+        memtable.insert("6bc".bytes().collect(), Some("abc".bytes().collect()));
+        sstable::flush_to_sstable(&config, &memtable).unwrap();
+
+        let mut reader  = Reader::new();
+        reader.init(&config);
+
+        assert_eq!(2, reader.sstables.len());
+
+        let find_none = reader.find("7bc".as_bytes());
+        assert_eq!(true, find_none.is_none());
+
+        let find1 = reader.find("1bc".as_bytes());
+        assert_eq!(true, find1.is_some());
+        assert_eq!(String::from("abc").into_bytes(), find1.unwrap());
+        let find1 = reader.find("1ef".as_bytes());
+        assert_eq!(true, find1.is_some());
+        assert_eq!(String::from("def").into_bytes(), find1.unwrap());
+
+        let find1 = reader.find("2bc".as_bytes());
+        assert_eq!(true, find1.is_some());
+        assert_eq!(String::from("abc").into_bytes(), find1.unwrap());
+        let find1 = reader.find("2ef".as_bytes());
+        assert_eq!(true, find1.is_some());
+        assert_eq!(String::from("def").into_bytes(), find1.unwrap());
+
+        let find1 = reader.find("3bc".as_bytes());
+        assert_eq!(true, find1.is_some());
+        assert_eq!(String::from("abc").into_bytes(), find1.unwrap());
+
+        let find1 = reader.find("4bc".as_bytes());
+        assert_eq!(true, find1.is_some());
+        assert_eq!(String::from("abc").into_bytes(), find1.unwrap());
+        let find1 = reader.find("4ef".as_bytes());
+        assert_eq!(true, find1.is_some());
+        assert_eq!(String::from("def").into_bytes(), find1.unwrap());
+
+        let find1 = reader.find("5bc".as_bytes());
+        assert_eq!(true, find1.is_some());
+        assert_eq!(String::from("abc").into_bytes(), find1.unwrap());
+        let find1 = reader.find("5ef".as_bytes());
+        assert_eq!(true, find1.is_some());
+        assert_eq!(String::from("def").into_bytes(), find1.unwrap());
+
+        let find1 = reader.find("6bc".as_bytes());
+        assert_eq!(true, find1.is_some());
+        assert_eq!(String::from("abc").into_bytes(), find1.unwrap());
+
+        fs::remove_dir_all(data_dir).unwrap();        
     }
 }
 
@@ -452,3 +537,5 @@ mod find_block_tests {
         assert_eq!(None, find_block(&search_key, &table_meta));
     }
 }
+
+

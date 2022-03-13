@@ -21,8 +21,11 @@ pub struct Engine {
 impl Engine {
     // TODO consider whether it's a dumbo thing to do to do all this init stuff in constructor
     pub fn new() -> Self {
+        let config = config::Config::new();
+
         // derive init state from the WAL that are on disk
         // TODO handle this error
+        // TODO this needs to take the config as input
         let mut wal_recovery = wal::recover().unwrap();
 
         // when we want to flush a memtable, we send a pointer to it in this channel
@@ -38,8 +41,9 @@ impl Engine {
         let wal = wal::Wal::new(memtable.id.clone());
 
         // setup the thing to read from sstables (on disk)
+        // TODO this needs to take the config as input
         let mut sstable_reader = sstable::reader::Reader::new();
-        sstable_reader.init();
+        sstable_reader.init(&config);
         let sstable_reader_ptr = Arc::new(RwLock::new(sstable_reader));
 
         // setup out list of memtables that we'll be reading from while they're still in the
@@ -50,8 +54,6 @@ impl Engine {
             flushing_memtables.push(mt_ptr.clone());
         });
         let flushing_memtables_ptr = Arc::new(RwLock::new(flushing_memtables));
-
-        let config = config::Config::new();
 
         // finally create the engine
         let engine = Engine {

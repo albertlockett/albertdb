@@ -201,11 +201,9 @@ fn flush_sstable_meta(
         Ok(_) => return Ok(()),
         Err(err) => {
             log::error!("Error happen {:?}", err);
-            // TODO handle this
-            // return Err(std::io::Error::from(err))
+            panic!("error deserializsing {}/sstable-meta-{}", config.data_dir, memtable.id);
         }
     };
-    return Ok(());
 }
 
 #[cfg(test)]
