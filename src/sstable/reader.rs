@@ -8,8 +8,8 @@ use std::io::{Read, Seek};
 use std::path;
 
 use super::{BlockMeta, Entry, TableMeta};
-use crate::memtable;
 use crate::config;
+use crate::memtable;
 
 pub struct Reader {
     sstables: VecDeque<(TableMeta, Box<path::Path>)>,
@@ -29,7 +29,7 @@ impl Reader {
     pub fn init(&mut self, config: &config::Config) {
         log::info!("initializing sstable reader");
 
-        let mut sstables = vec![];  
+        let mut sstables = vec![];
         for file in fs::read_dir(&config.data_dir).unwrap() {
             let path: Box<path::Path> = file.unwrap().path().into_boxed_path();
             if is_sstable(&path) {
@@ -305,7 +305,7 @@ mod reader_tests {
         memtable.insert("6bc".bytes().collect(), Some("abc".bytes().collect()));
         sstable::flush_to_sstable(&config, &memtable).unwrap();
 
-        let mut reader  = Reader::new();
+        let mut reader = Reader::new();
         reader.init(&config);
 
         assert_eq!(2, reader.sstables.len());
@@ -349,7 +349,7 @@ mod reader_tests {
         assert_eq!(true, find1.is_some());
         assert_eq!(String::from("abc").into_bytes(), find1.unwrap());
 
-        fs::remove_dir_all(data_dir).unwrap();        
+        fs::remove_dir_all(data_dir).unwrap();
     }
 }
 
@@ -537,5 +537,3 @@ mod find_block_tests {
         assert_eq!(None, find_block(&search_key, &table_meta));
     }
 }
-
-

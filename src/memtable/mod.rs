@@ -1,7 +1,11 @@
+// Memtable is implemented as a binary treap using random priority to ensure balance
+
 use rand::prelude::*;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::RwLock;
+
+// TODO move node etc. into a seperate module so this file isn't so long
 
 pub struct Node {
     key: Vec<u8>,

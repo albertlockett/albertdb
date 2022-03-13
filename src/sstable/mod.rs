@@ -201,7 +201,10 @@ fn flush_sstable_meta(
         Ok(_) => return Ok(()),
         Err(err) => {
             log::error!("Error happen {:?}", err);
-            panic!("error deserializsing {}/sstable-meta-{}", config.data_dir, memtable.id);
+            panic!(
+                "error deserializsing {}/sstable-meta-{}",
+                config.data_dir, memtable.id
+            );
         }
     };
 }
