@@ -71,12 +71,19 @@ impl Reader {
 
     pub fn find(&self, key: &[u8]) -> Option<Vec<u8>> {
         for (table_meta, path) in &self.sstables {
-            let block = find_block(key, table_meta);
-            if block.is_none() {
+            log::debug!("searching for '{:?}' in '{:?}", key, path);
+
+            if !table_meta.bloom_filter.contains(key) {
+                log::debug!("not found in bloom filter");
                 continue;
             }
 
-            log::debug!("searching for '{:?}' in '{:?}", key, path);
+            let block = find_block(key, table_meta);
+            if block.is_none() {
+                log::debug!("not found in blocks");
+                continue;
+            }
+
             let result = find_from_table(key, path, &table_meta.blocks[block.unwrap()]);
             match result {
                 Ok((Some(entry), _)) => {
@@ -86,10 +93,9 @@ impl Reader {
                 Ok((None, true)) => return None,
                 Ok((None, false)) => {
                     log::debug!("not found '{:?}' in '{:?}", key, path);
-                    // skip - could debug log?
                 }
                 Err(err) => {
-                    // TODO handle more smartly?
+                    // TODO handle in a smarter way
                     panic!("error happened reading from file {:?} {:?}", path, err)
                 }
             }

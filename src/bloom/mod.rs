@@ -1,5 +1,7 @@
 use fasthash;
+use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Deserialize, Serialize)]
 pub struct BloomFilter {
     num_hashes: u8,
     size: u32,
@@ -21,14 +23,14 @@ impl BloomFilter {
         };
     }
 
-    pub fn contains(&mut self, key: &[u8]) -> bool {
+    pub fn contains(&self, key: &[u8]) -> bool {
         let indices = self.indices(key);
 
         for i in indices {
             let (segment_num, segment_i) = self.segments_inices(i);
             let val = 1 << segment_i;
             if self.segments[segment_num] & val == 0 {
-                return false
+                return false;
             }
         }
         return true;
@@ -107,9 +109,11 @@ mod mod_tests {
         let mut bloom_filter = BloomFilter::new(256, 0, 3);
         bloom_filter.insert("a".as_bytes());
         // double check we won't get a false positive on "b" ...
-        assert_ne!(bloom_filter.indices("a".as_bytes()), bloom_filter.indices("b".as_bytes()));
+        assert_ne!(
+            bloom_filter.indices("a".as_bytes()),
+            bloom_filter.indices("b".as_bytes())
+        );
         assert_eq!(true, bloom_filter.contains("a".as_bytes()));
         assert_eq!(false, bloom_filter.contains("b".as_bytes()));
     }
-
 }

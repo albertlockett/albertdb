@@ -19,7 +19,7 @@ pub struct Engine {
 }
 
 impl Engine {
-    // TODO consider whether it's a dumbo thing to do to do all this init stuff in constructor
+    // TODO consider whether adding an init method instead of doing all this in the constructor
     pub fn new() -> Self {
         let config = config::Config::new();
 
@@ -41,7 +41,6 @@ impl Engine {
         let wal = wal::Wal::new(memtable.id.clone());
 
         // setup the thing to read from sstables (on disk)
-        // TODO this needs to take the config as input
         let mut sstable_reader = sstable::reader::Reader::new();
         sstable_reader.init(&config);
         let sstable_reader_ptr = Arc::new(RwLock::new(sstable_reader));

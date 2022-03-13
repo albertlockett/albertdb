@@ -17,7 +17,7 @@ impl Config {
         // TODO initialize this somehow
         Config {
             data_dir: String::from("/tmp"),
-            memtable_max_count: 1024,
+            memtable_max_count: 3,
             sstable_block_size: 1024,
         }
     }

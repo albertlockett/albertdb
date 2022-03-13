@@ -8,6 +8,7 @@ use std::io::Write;
 use std::path;
 use std::time;
 
+use crate::bloom;
 use crate::config;
 use crate::memtable;
 
@@ -26,6 +27,7 @@ struct Entry {
 #[derive(Debug, Deserialize, Serialize)]
 struct TableMeta {
     blocks: Vec<BlockMeta>,
+    bloom_filter: bloom::BloomFilter,
     timestamp: u128,
 }
 
@@ -33,6 +35,7 @@ impl TableMeta {
     fn new() -> Self {
         TableMeta {
             blocks: vec![],
+            bloom_filter: bloom::BloomFilter::new(2048, 2142 /* <- random seed */, 3),
             timestamp: time::SystemTime::now()
                 .duration_since(time::UNIX_EPOCH)
                 .unwrap()
@@ -64,6 +67,7 @@ pub fn flush_to_sstable(config: &config::Config, memtable: &memtable::Memtable) 
     let iter = memtable.iter();
     let entries: Vec<Entry> = iter
         .map(|(key, value)| {
+            table_meta.bloom_filter.insert(&key);
             let key_length = key.len() as u32;
             let mut value_length = 0;
             let mut entry_value = vec![];
