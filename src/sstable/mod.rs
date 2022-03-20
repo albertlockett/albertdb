@@ -15,13 +15,13 @@ use crate::memtable;
 pub mod reader;
 
 #[derive(Debug)]
-struct Entry {
+pub struct Entry {
     flags: u8,
     key_length: u32,
-    key: Vec<u8>,
+    pub key: Vec<u8>,
     value_length: u32,
-    value: Vec<u8>,
-    deleted: bool,
+    pub value: Vec<u8>,
+    pub deleted: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -29,7 +29,7 @@ pub struct TableMeta {
     blocks: Vec<BlockMeta>,
     bloom_filter: bloom::BloomFilter,
     timestamp: u128,
-    level: u8,
+    pub level: u8,
 }
 
 impl TableMeta {

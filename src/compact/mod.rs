@@ -4,14 +4,68 @@ use std::io;
 use std::path;
 
 use crate::config;
+use crate::memtable;
 use crate::sstable;
 
 fn compact(config: &config::Config, level: u8) {
-    let compact_candidates = find_compact_candidates(config, level);
+    // TODO cycle thru the levels
+    let compact_candidates = find_compact_candidates(config, level).unwrap(); // TODO handle error
+    if compact_candidates.len() <= 0 {
+        return;
+    }
+
+    let mut memtable = memtable::Memtable::new();
+
+    for (path, table_meta) in compact_candidates {
+        let iter = sstable::reader::SstableIterator::new(path, table_meta);
+        for entry in iter {
+            if entry.deleted {
+                memtable.insert(entry.key, None);
+            } else {
+                memtable.insert(entry.key, Some(entry.value));
+            }
+        }
+    }
+
+    sstable::flush_to_sstable(config, &memtable).unwrap();
+
+    // TODO delete the pathsfound in compact_candidates
 }
 
-fn find_compact_candidates(config: &config::Config, level: u8) -> io::Result<Vec<Box<path::Path>>> {
-    let mut results: Vec<Box<path::Path>> = vec![];
+#[cfg(test)]
+mod compact_tests {
+    use super::*;
+    use crate::memtable;
+
+    #[test]
+    fn it_can_compact_the_memtables() {
+        let data_dir = "/tmp/compact_tests/it_can_compact_the_memtables";
+        fs::remove_dir_all(data_dir);
+        fs::create_dir_all(data_dir).unwrap();
+
+        let mut config = config::Config::new();
+        config.data_dir = String::from(data_dir);
+        config.compaction_threshold = 1;
+
+        let mut memtable1 = memtable::Memtable::new();
+        memtable1.insert("abc".bytes().collect(), Some("abc".bytes().collect()));
+        assert_eq!(true, sstable::flush_to_sstable(&config, &memtable1).is_ok());
+
+        let mut memtable2 = memtable::Memtable::new();
+        memtable2.insert("abc".bytes().collect(), Some("abc".bytes().collect()));
+        assert_eq!(true, sstable::flush_to_sstable(&config, &memtable2).is_ok());
+
+        compact(&config, 0);
+        // TODO assert that there's a newer memtable than the other 2 and that it only has
+        // one block and it has a size of 6 bytes   
+    }
+}
+
+fn find_compact_candidates(
+    config: &config::Config,
+    level: u8,
+) -> io::Result<Vec<(Box<path::Path>, sstable::TableMeta)>> {
+    let mut results = vec![];
     let files: fs::ReadDir = fs::read_dir(&config.data_dir)?;
 
     let mut total_size = 0u64;
@@ -19,16 +73,21 @@ fn find_compact_candidates(config: &config::Config, level: u8) -> io::Result<Vec
     for file in files {
         let file_path = file.unwrap().path();
         if !is_sstable(&file_path) {
-            continue
-         }
-         if is_flushing(&file_path) {
+            continue;
+        }
+        if is_flushing(&file_path) {
             continue;
         }
 
         let meta_path = to_metadata_path(&file_path);
         let table_meta = read_table_meta(&path::Path::new(&meta_path));
+        if table_meta.level != level {
+            // TODO write a test for this
+            continue;
+        }
+
         total_size += table_meta.table_size_compressed();
-        results.push(file_path.into_boxed_path());
+        results.push((file_path.into_boxed_path(), table_meta));
     }
 
     if total_size < config.compaction_threshold {

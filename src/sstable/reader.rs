@@ -543,3 +543,108 @@ mod find_block_tests {
         assert_eq!(None, find_block(&search_key, &table_meta));
     }
 }
+
+#[derive(Debug)]
+pub struct SstableIterator {
+    path: Box<path::Path>,
+    table_meta: super::TableMeta,
+    table_index: usize,
+    block_index: usize,
+    curr_block: Vec<super::Entry>,
+}
+
+impl SstableIterator {
+    pub fn new(path: Box<path::Path>, table_meta: super::TableMeta) -> Self {
+        SstableIterator {
+            path,
+            table_meta,
+            table_index: 0,
+            block_index: 0,
+            curr_block: vec![],
+        }
+    }
+
+    fn goto_next_block(&mut self) -> io::Result<()> {
+        let block = &self.table_meta.blocks[self.table_index];
+        self.table_index += 1;
+        let bytes1 = super::reader::deserialize_block(&self.path, block).unwrap();
+        let mut bytes = bytes1.into_iter().map(|b| Ok::<u8, io::Error>(b));
+
+        let mut next_block = vec![];
+        loop {
+            let flags_1_option = bytes.next();
+            if flags_1_option.is_none() {
+                break;
+            }
+
+            let flags_1 = flags_1_option.unwrap().unwrap();
+            let deleted = flags_1 & (1 << 6) > 0;
+
+            let key_length = ((bytes.next().unwrap()? as u32) << 24)
+                + ((bytes.next().unwrap()? as u32) << 16)
+                + ((bytes.next().unwrap()? as u32) << 8)
+                + (bytes.next().unwrap()? as u32);
+
+            let mut key: Vec<u8> = Vec::with_capacity(key_length as usize);
+            for _ in 0..key_length {
+                key.push(bytes.next().unwrap()?);
+            }
+
+            let mut value_length = 0;
+            if !deleted {
+                value_length = ((bytes.next().unwrap()? as u32) << 24)
+                    + ((bytes.next().unwrap()? as u32) << 16)
+                    + ((bytes.next().unwrap()? as u32) << 8)
+                    + (bytes.next().unwrap()? as u32);
+            }
+
+            let mut value = Vec::with_capacity(value_length as usize);
+            for _ in 0..value_length {
+                value.push(bytes.next().unwrap()?);
+            }
+
+            let entry = super::Entry {
+                flags: flags_1,
+                deleted,
+                key,
+                key_length,
+                value,
+                value_length,
+            };
+            next_block.push(entry);
+        }
+
+        self.curr_block = next_block;
+        self.block_index = 0;
+
+        Ok(())
+    }
+}
+
+impl Iterator for SstableIterator {
+    type Item = super::Entry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.table_index >= self.table_meta.blocks.len() {
+            return None;
+        }
+
+        if self.block_index >= self.curr_block.len() {
+            self.goto_next_block().unwrap();
+        }
+
+        let entry = std::mem::replace(
+            &mut self.curr_block[self.block_index],
+            super::Entry {
+                key: vec![],
+                value: vec![],
+                key_length: 0,
+                value_length: 0,
+                flags: 0,
+                deleted: false,
+            },
+        );
+
+        Some(entry)
+    }
+}
