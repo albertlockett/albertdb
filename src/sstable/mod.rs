@@ -25,10 +25,11 @@ struct Entry {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct TableMeta {
+pub struct TableMeta {
     blocks: Vec<BlockMeta>,
     bloom_filter: bloom::BloomFilter,
     timestamp: u128,
+    level: u8,
 }
 
 impl TableMeta {
@@ -40,7 +41,16 @@ impl TableMeta {
                 .duration_since(time::UNIX_EPOCH)
                 .unwrap()
                 .as_millis(),
+            level: 0,
         }
+    }
+
+    pub fn table_size_compressed(&self) -> u64 {
+        let mut table_size = 0u64;
+        for block in &self.blocks {
+            table_size += block.size_compressed as u64
+        }
+        return table_size;
     }
 }
 

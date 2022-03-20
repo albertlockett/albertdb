@@ -1,4 +1,5 @@
 pub mod bloom;
+pub mod compact;
 pub mod config;
 pub mod engine;
 pub mod frontend;

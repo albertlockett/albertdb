@@ -10,6 +10,9 @@ pub struct Config {
 
     // approximate size of compressed blocks in sstables
     pub sstable_block_size: u32,
+
+    // size of sstables on disk before they will be compacted
+    pub compaction_threshold: u64,
 }
 
 impl Config {
@@ -19,6 +22,7 @@ impl Config {
             data_dir: String::from("/tmp"),
             memtable_max_count: 3,
             sstable_block_size: 1024,
+            compaction_threshold: 4096,
         }
     }
 }
