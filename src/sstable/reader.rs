@@ -298,7 +298,7 @@ mod reader_tests {
         memtable.insert("2ef".bytes().collect(), Some("def".bytes().collect()));
         // block 3
         memtable.insert("3bc".bytes().collect(), Some("abc".bytes().collect()));
-        sstable::flush_to_sstable(&config, &memtable).unwrap();
+        sstable::flush_to_sstable(&config, &memtable, 0).unwrap();
 
         let mut memtable = memtable::Memtable::new();
         // block 1
@@ -309,7 +309,7 @@ mod reader_tests {
         memtable.insert("5ef".bytes().collect(), Some("def".bytes().collect()));
         // block 3
         memtable.insert("6bc".bytes().collect(), Some("abc".bytes().collect()));
-        sstable::flush_to_sstable(&config, &memtable).unwrap();
+        sstable::flush_to_sstable(&config, &memtable, 0).unwrap();
 
         let mut reader = Reader::new();
         reader.init(&config);
@@ -366,7 +366,7 @@ mod find_block_tests {
 
     #[test]
     fn test5() {
-        let mut table_meta = TableMeta::new();
+        let mut table_meta = TableMeta::new(0);
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
@@ -389,7 +389,7 @@ mod find_block_tests {
 
     #[test]
     fn smoke_test() {
-        let mut table_meta = TableMeta::new();
+        let mut table_meta = TableMeta::new(0);
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
@@ -419,7 +419,7 @@ mod find_block_tests {
 
     #[test]
     fn test2() {
-        let mut table_meta = TableMeta::new();
+        let mut table_meta = TableMeta::new(0);
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
@@ -448,7 +448,7 @@ mod find_block_tests {
 
     #[test]
     fn test3() {
-        let mut table_meta = TableMeta::new();
+        let mut table_meta = TableMeta::new(0);
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
@@ -477,7 +477,7 @@ mod find_block_tests {
 
     #[test]
     fn test4() {
-        let mut table_meta = TableMeta::new();
+        let mut table_meta = TableMeta::new(0);
         table_meta.blocks.push(BlockMeta {
             count: 10,
             size: 10,
@@ -506,7 +506,7 @@ mod find_block_tests {
 
     #[test]
     fn test6() {
-        let mut table_meta = TableMeta::new();
+        let mut table_meta = TableMeta::new(0);
         let starts = vec!["a", "g", "j", "l", "r", "u", "z"];
         for i in 0..starts.len() {
             table_meta.blocks.push(BlockMeta {

@@ -33,7 +33,7 @@ pub struct TableMeta {
 }
 
 impl TableMeta {
-    fn new() -> Self {
+    fn new(level: u8) -> Self {
         TableMeta {
             blocks: vec![],
             bloom_filter: bloom::BloomFilter::new(2048, 2142 /* <- random seed */, 3),
@@ -41,7 +41,7 @@ impl TableMeta {
                 .duration_since(time::UNIX_EPOCH)
                 .unwrap()
                 .as_millis(),
-            level: 0,
+            level,
         }
     }
 
@@ -66,13 +66,17 @@ struct BlockMeta {
 //
 // TODO
 // - comment about what this is doing
-pub fn flush_to_sstable(config: &config::Config, memtable: &memtable::Memtable) -> io::Result<u32> {
+pub fn flush_to_sstable(
+    config: &config::Config,
+    memtable: &memtable::Memtable,
+    level: u8,
+) -> io::Result<u32> {
     log::info!(
         "flushing memtable id = {}, size = {}",
         memtable.id,
         memtable.size()
     );
-    let mut table_meta = TableMeta::new();
+    let mut table_meta = TableMeta::new(level);
 
     let iter = memtable.iter();
     let entries: Vec<Entry> = iter
@@ -250,7 +254,7 @@ mod mod_tests {
         // block 3
         memtable.insert("3bc".bytes().collect(), Some("abc".bytes().collect()));
 
-        let result = flush_to_sstable(&config, &memtable);
+        let result = flush_to_sstable(&config, &memtable, 0);
 
         // expect result to be OK
         assert_eq!(true, result.is_ok());
@@ -298,4 +302,13 @@ mod mod_tests {
 
         fs::remove_dir_all(data_dir).unwrap();
     }
+}
+
+pub fn delete_by_id(config: &config::Config, sstable_id: &str) -> io::Result<()> {
+    let data_file = format!("{}/sstable-data-{}", config.data_dir, sstable_id);
+    fs::remove_file(data_file)?;
+    let meta_file = format!("{}/sstable-meta-{}", config.data_dir, sstable_id);
+    fs::remove_file(meta_file)?;
+
+    Ok(())
 }

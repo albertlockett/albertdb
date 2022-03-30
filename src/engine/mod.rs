@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::sync::{Mutex, RwLock};
 use std::thread;
 
+use crate::compact;
 use crate::config;
 use crate::memtable;
 use crate::sstable;
@@ -65,17 +66,19 @@ impl Engine {
         };
 
         // setup handlir for sending the memtables to be flushed and update internal state
-        let _handle = thread::spawn(move || {
+        let flush_config = config.clone();
+        let flush_reader_ref = sstable_reader_ptr.clone();
+        let _flush_handle = thread::spawn(move || {
             while let Ok(value) = flush_receiver.recv() {
                 // flush the memtable
-                sstable::flush_to_sstable(&config, &value).unwrap();
+                sstable::flush_to_sstable(&flush_config, &value, 0).unwrap();
 
                 // delete the WAL
                 let wal = wal::Wal::new(value.id.clone());
                 wal.delete().unwrap(); // TODO could handle this error
 
                 // signal to the reader that there's a new memtable to read
-                let mut reader = sstable_reader_ptr.write().unwrap();
+                let mut reader = flush_reader_ref.write().unwrap();
                 reader.add_memtable(&value);
 
                 // remove the memtable from the list of flushing memtables
@@ -89,6 +92,30 @@ impl Engine {
                         memtables.len() - 1
                     );
                     memtables.remove(position);
+                }
+            }
+        });
+
+        // set up handler for periodically compacting memtables
+        let compact_config = config.clone();
+        let compact_reader_ptr = sstable_reader_ptr.clone();
+        let _compact_handle = thread::spawn(move || {
+            let sleep_millies =
+                std::time::Duration::from_millis(compact_config.compaction_check_period);
+            loop {
+                thread::sleep(sleep_millies);
+                let compact_result_o = compact::compact(&compact_config, 0);
+
+                if compact_result_o.is_some() {
+                    let (new_memtable, compacted_memtable_ids) = compact_result_o.unwrap();
+                    let mut reader = compact_reader_ptr.write().unwrap();
+                    reader.add_memtable(&new_memtable);
+                    // TODO remove from reader by id
+
+                    for sstable_id in &compacted_memtable_ids {
+                        // TODO need to handle this panic!
+                        sstable::delete_by_id(&compact_config, sstable_id).unwrap();
+                    }
                 }
             }
         });

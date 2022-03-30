@@ -13,16 +13,20 @@ pub struct Config {
 
     // size of sstables on disk before they will be compacted
     pub compaction_threshold: u64,
+
+    // how often we check if we should compact tables (millis)
+    pub compaction_check_period: u64,
 }
 
 impl Config {
     pub fn new() -> Self {
-        // TODO initialize this somehow
+        // TODO initialize this somehow & choose more reasonable defaults
         Config {
             data_dir: String::from("/tmp"),
             memtable_max_count: 3,
             sstable_block_size: 1024,
-            compaction_threshold: 4096,
+            compaction_threshold: 256,
+            compaction_check_period: 1000,
         }
     }
 }

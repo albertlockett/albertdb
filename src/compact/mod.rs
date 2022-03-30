@@ -7,16 +7,19 @@ use crate::config;
 use crate::memtable;
 use crate::sstable;
 
-fn compact(config: &config::Config, level: u8) {
+pub fn compact(config: &config::Config, level: u8) -> Option<(memtable::Memtable, Vec<String>)> {
     // TODO cycle thru the levels
     let compact_candidates = find_compact_candidates(config, level).unwrap(); // TODO handle error
     if compact_candidates.len() <= 0 {
-        return;
+        return None;
     }
 
     let mut memtable = memtable::Memtable::new();
 
+    let mut compacted_memtable_ids = vec![];
+
     for (path, table_meta) in compact_candidates {
+        compacted_memtable_ids.push(to_memtable_id(&path));
         let iter = sstable::reader::SstableIterator::new(path, table_meta);
         for entry in iter {
             if entry.deleted {
@@ -27,9 +30,14 @@ fn compact(config: &config::Config, level: u8) {
         }
     }
 
-    sstable::flush_to_sstable(config, &memtable).unwrap();
-
-    // TODO delete the pathsfound in compact_candidates
+    sstable::flush_to_sstable(config, &memtable, level + 1).unwrap();
+    log::debug!(
+        "compacted {} memtables into new memtable {} at level {}",
+        compacted_memtable_ids.len(),
+        memtable.id,
+        level + 1
+    );
+    Some((memtable, compacted_memtable_ids))
 }
 
 #[cfg(test)]
@@ -49,15 +57,21 @@ mod compact_tests {
 
         let mut memtable1 = memtable::Memtable::new();
         memtable1.insert("abc".bytes().collect(), Some("abc".bytes().collect()));
-        assert_eq!(true, sstable::flush_to_sstable(&config, &memtable1).is_ok());
+        assert_eq!(
+            true,
+            sstable::flush_to_sstable(&config, &memtable1, 0).is_ok()
+        );
 
         let mut memtable2 = memtable::Memtable::new();
         memtable2.insert("abc".bytes().collect(), Some("abc".bytes().collect()));
-        assert_eq!(true, sstable::flush_to_sstable(&config, &memtable2).is_ok());
+        assert_eq!(
+            true,
+            sstable::flush_to_sstable(&config, &memtable2, 0).is_ok()
+        );
 
         compact(&config, 0);
         // TODO assert that there's a newer memtable than the other 2 and that it only has
-        // one block and it has a size of 6 bytes   
+        // one block and it has a size of 6 bytes
     }
 }
 
@@ -91,9 +105,19 @@ fn find_compact_candidates(
     }
 
     if total_size < config.compaction_threshold {
+        log::debug!(
+            "total size {} bytes is < compaction threshold {} bytes: not compacting",
+            total_size,
+            config.compaction_threshold
+        );
         return Ok(vec![]);
     }
 
+    log::debug!(
+        "total size {} bytes is > compaction threshold {} bytes: compacting",
+        total_size,
+        config.compaction_threshold
+    );
     Ok(results)
 }
 
@@ -115,11 +139,17 @@ mod find_compact_candidates_tets {
 
         let mut memtable1 = memtable::Memtable::new();
         memtable1.insert("abc".bytes().collect(), Some("abc".bytes().collect()));
-        assert_eq!(true, sstable::flush_to_sstable(&config, &memtable1).is_ok());
+        assert_eq!(
+            true,
+            sstable::flush_to_sstable(&config, &memtable1, 0).is_ok()
+        );
 
         let mut memtable2 = memtable::Memtable::new();
         memtable2.insert("abc".bytes().collect(), Some("abc".bytes().collect()));
-        assert_eq!(true, sstable::flush_to_sstable(&config, &memtable2).is_ok());
+        assert_eq!(
+            true,
+            sstable::flush_to_sstable(&config, &memtable2, 0).is_ok()
+        );
 
         let results_r = find_compact_candidates(&config, 0);
         assert_eq!(true, results_r.is_ok());
@@ -156,6 +186,16 @@ fn to_metadata_path(path: &path::Path) -> String {
             .replace(path.to_str().unwrap(), "sstable-meta"),
     );
     return meta_path;
+}
+
+// TODO this could also be moved to a util function
+fn to_memtable_id(path: &path::Path) -> String {
+    let memtable_id = String::from(
+        Regex::new(".*sstable-data-")
+            .unwrap()
+            .replace(path.to_str().unwrap(), ""),
+    );
+    return memtable_id;
 }
 
 // TODO make this a util function casue it's shared w/ sstable module (reader)
