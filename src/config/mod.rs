@@ -16,6 +16,9 @@ pub struct Config {
 
     // how often we check if we should compact tables (millis)
     pub compaction_check_period: u64,
+
+    // number of levels for leveld compaction
+    pub compaction_max_levels: u8,
 }
 
 impl Config {
@@ -27,6 +30,7 @@ impl Config {
             sstable_block_size: 1024,
             compaction_threshold: 256,
             compaction_check_period: 1000,
+            compaction_max_levels: 4,
         }
     }
 }

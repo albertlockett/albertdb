@@ -23,7 +23,7 @@ pub fn compact(config: &config::Config, level: u8) -> Option<(memtable::Memtable
         let iter = sstable::reader::SstableIterator::new(path, table_meta);
         for entry in iter {
             if entry.deleted {
-                memtable.insert(entry.key, None);
+                memtable.insert(entry.key, None); // TODO handle case is older than GC grace period
             } else {
                 memtable.insert(entry.key, Some(entry.value));
             }
@@ -32,7 +32,8 @@ pub fn compact(config: &config::Config, level: u8) -> Option<(memtable::Memtable
 
     sstable::flush_to_sstable(config, &memtable, level + 1).unwrap();
     log::debug!(
-        "compacted {} memtables into new memtable {} at level {}",
+        "level {}: compacted {} memtables into new memtable {} at level {}",
+        level,
         compacted_memtable_ids.len(),
         memtable.id,
         level + 1
@@ -106,7 +107,8 @@ fn find_compact_candidates(
 
     if total_size < config.compaction_threshold {
         log::debug!(
-            "total size {} bytes is < compaction threshold {} bytes: not compacting",
+            "level {}: total size {} bytes is < compaction threshold {} bytes: not compacting",
+            level,
             total_size,
             config.compaction_threshold
         );
@@ -114,7 +116,8 @@ fn find_compact_candidates(
     }
 
     log::debug!(
-        "total size {} bytes is > compaction threshold {} bytes: compacting",
+        "level {}: total size {} bytes is > compaction threshold {} bytes: compacting",
+        level,
         total_size,
         config.compaction_threshold
     );

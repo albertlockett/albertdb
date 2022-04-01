@@ -104,17 +104,18 @@ impl Engine {
                 std::time::Duration::from_millis(compact_config.compaction_check_period);
             loop {
                 thread::sleep(sleep_millies);
-                let compact_result_o = compact::compact(&compact_config, 0);
+                for level in 0..compact_config.compaction_max_levels {
+                    let compact_result_o = compact::compact(&compact_config, level);
 
-                if compact_result_o.is_some() {
-                    let (new_memtable, compacted_memtable_ids) = compact_result_o.unwrap();
-                    let mut reader = compact_reader_ptr.write().unwrap();
-                    reader.add_memtable(&new_memtable);
-                    // TODO remove from reader by id
+                    if compact_result_o.is_some() {
+                        let (new_memtable, compacted_memtable_ids) = compact_result_o.unwrap();
+                        let mut reader = compact_reader_ptr.write().unwrap();
+                        reader.add_memtable(&new_memtable);
 
-                    for sstable_id in &compacted_memtable_ids {
-                        // TODO need to handle this panic!
-                        sstable::delete_by_id(&compact_config, sstable_id).unwrap();
+                        for sstable_id in &compacted_memtable_ids {
+                            reader.remove_memtable(sstable_id);
+                            sstable::delete_by_id(&compact_config, sstable_id).unwrap();
+                        }
                     }
                 }
             }

@@ -118,6 +118,20 @@ impl Reader {
         // TODO need to re-sort sstable
         self.sstables.push_front((table_meta, path));
     }
+
+    pub fn remove_memtable(&mut self, memtable_id: &str) {
+        let index = self
+            .sstables
+            .iter()
+            .position(|(_, path)| path.to_str().unwrap().ends_with(memtable_id));
+
+        if index.is_some() {
+            log::debug!("memtable {} removed", memtable_id);
+            self.sstables.remove(index.unwrap());
+        } else {
+            log::debug!("no memtable {} to remove", memtable_id);
+        }
+    }
 }
 
 fn to_metadata_path(path: &path::Path) -> String {
@@ -354,6 +368,34 @@ mod reader_tests {
         let find1 = reader.find("6bc".as_bytes());
         assert_eq!(true, find1.is_some());
         assert_eq!(String::from("abc").into_bytes(), find1.unwrap());
+
+        fs::remove_dir_all(data_dir).unwrap();
+    }
+
+    #[test]
+    fn remove_from_reader() {
+        let data_dir = "/tmp/sstable_reader_tests/remove_from_reader";
+        fs::remove_dir_all(data_dir);
+        fs::create_dir_all(data_dir).unwrap();
+
+        let mut config = config::Config::new();
+        config.data_dir = String::from(data_dir);
+        config.sstable_block_size = 12;
+
+        let mut memtable = memtable::Memtable::new();
+        memtable.insert("abc".bytes().collect(), Some("abc".bytes().collect()));
+        sstable::flush_to_sstable(&config, &memtable, 0).unwrap();
+
+        let mut reader = Reader::new();
+        reader.init(&config);
+
+        assert_eq!(1, reader.sstables.len());
+        let find1 = reader.find("abc".as_bytes());
+        assert_eq!(true, find1.is_some());
+
+        reader.remove_memtable(&memtable.id);
+        assert_eq!(0, reader.sstables.len());
+        assert_eq!(false, reader.find("abc".as_bytes()).is_some());
 
         fs::remove_dir_all(data_dir).unwrap();
     }
@@ -625,11 +667,10 @@ impl Iterator for SstableIterator {
     type Item = super::Entry;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.table_index >= self.table_meta.blocks.len() {
-            return None;
-        }
-
         if self.block_index >= self.curr_block.len() {
+            if self.table_index >= self.table_meta.blocks.len() {
+                return None;
+            }
             self.goto_next_block().unwrap();
         }
 
@@ -644,6 +685,7 @@ impl Iterator for SstableIterator {
                 deleted: false,
             },
         );
+        self.block_index += 1;
 
         Some(entry)
     }
