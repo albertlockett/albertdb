@@ -23,10 +23,37 @@ The writes are also immediately peristed to write ahead log (WAL),
     which stores the key/value records on disk.
 The WAL will be used to recover the memtable in cases where the database crashes.
 
+### Memtable Flush
 memtable cannot grow indefinitely b/c it would use all memory on system.
 When the memtable (and corresponding WAL) reach a threshold,
     the memtable is flushed to an on-disk file called an sstable.
 After persisting the sstable to disk,
     the WAL is also deleted as it is no longer needed.
-The memtable remains available for reads during the flushing process.
+
+Once an sstable begins to be flushed,
+    a new sstable will be created that is available to write to.
+Only one memtable will be writable at a time.
+The memtable being flushed remains available for reads during the flushing process.
+
+Once flushing completes,
+    sstables are immutable and they become readable.
+
+### Updates
+
+Updates happen differently depending on where the old data was.
+If the older record was in the memtable, the node in the memtable (balanced tree)
+    is replaced.
+
+If the older record has been flushed to an sstable, 
+    we just write the value into the tree.
+The read path takes care of reading from the memtable before it reads sstable.
+
+## Read Path
+
+There is a sequence of datastructures that could contain the record.
+Each one will be checked in the order of how new are the values that each contains.
+
+First will be checked the writable memtable.
+Then will be checked each flushing memtable in order of how newly they were created.
+Finally each disk-resident sstable will be checked in order of their newness.
 
