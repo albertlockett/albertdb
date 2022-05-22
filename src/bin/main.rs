@@ -5,6 +5,9 @@ use serde::Deserialize;
 use std::str;
 use std::sync::{Arc, RwLock};
 
+// TODO move everything in this into frontend in preparation to support
+// multiple frontend implementations
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::init();
@@ -16,12 +19,13 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             .data(mmt_arc.clone())
-            .route("/write2", web::post().to(handle_write))
+            .route("/write", web::post().to(handle_write))
             .route("/read", web::post().to(handle_read))
             .route("/delete", web::post().to(handle_delete))
     });
 
     server
+        // TODO add this port to config
         .bind("127.0.0.1:4000")
         .expect("error binding server")
         .run()

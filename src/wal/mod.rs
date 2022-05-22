@@ -97,7 +97,7 @@ pub struct WalRecovery {
 }
 
 pub fn recover() -> io::Result<WalRecovery> {
-    let data_dir = "/tmp"; // TODO not have this hard-coded
+    let data_dir = "/tmp"; // TODO not have this hard-coded (read from config)
 
     // for any memtable that was writable during the last shutdown, we'll add
     // values into this new memtable and also create a new recovery wal for the

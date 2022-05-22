@@ -7,9 +7,9 @@ use crate::config;
 use crate::memtable;
 use crate::sstable;
 
+
 pub fn compact(config: &config::Config, level: u8) -> Option<(memtable::Memtable, Vec<String>)> {
-    // TODO cycle thru the levels
-    let compact_candidates = find_compact_candidates(config, level).unwrap(); // TODO handle error
+    let compact_candidates = find_compact_candidates(config, level).unwrap();
     if compact_candidates.len() <= 0 {
         return None;
     }
@@ -23,7 +23,8 @@ pub fn compact(config: &config::Config, level: u8) -> Option<(memtable::Memtable
         let iter = sstable::reader::SstableIterator::new(path, table_meta);
         for entry in iter {
             if entry.deleted {
-                memtable.insert(entry.key, None); // TODO handle case is older than GC grace period
+                // TODO handle case is older than GC grace period
+                memtable.insert(entry.key, None);
             } else {
                 memtable.insert(entry.key, Some(entry.value));
             }

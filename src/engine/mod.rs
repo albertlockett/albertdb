@@ -25,7 +25,6 @@ impl Engine {
         let config = config::Config::new();
 
         // derive init state from the WAL that are on disk
-        // TODO handle this error
         // TODO this needs to take the config as input
         let mut wal_recovery = wal::recover().unwrap();
 
@@ -166,7 +165,7 @@ impl Engine {
             .push(mt_pointer.clone());
         let sender = self.flush_sender.lock().unwrap();
         let flush_result = sender.send(mt_pointer.clone());
-        flush_result.unwrap(); // TODO could handle this
+        flush_result.unwrap();
     }
 
     pub fn find(&self, key: &[u8]) -> Option<Vec<u8>> {

@@ -56,7 +56,7 @@ impl Memtable {
         key: Vec<u8>,
         mut value: Option<Vec<u8>>,
     ) {
-        // oops the tree is empty - new node is the root
+        // the tree is empty - new node is the root
         if matches!(self.root, None) {
             let new_node = Arc::new(RwLock::new(Node {
                 key,

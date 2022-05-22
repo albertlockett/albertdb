@@ -1,6 +1,8 @@
 use fasthash;
 use serde::{Deserialize, Serialize};
 
+// TODO add comments to this & some documentation about how to use this module
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BloomFilter {
     num_hashes: u8,
