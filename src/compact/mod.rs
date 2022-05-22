@@ -1,3 +1,5 @@
+// This database uses leveled compaction only
+
 use regex::Regex;
 use std::fs;
 use std::io;
@@ -7,7 +9,11 @@ use crate::config;
 use crate::memtable;
 use crate::sstable;
 
-
+// compact stables at a given level. returns the new memtable which old values are compacted into
+// as well as the list of memtable ids that were compacted. It returns None if there were no memtables
+// at the given level that needed compaction.
+// It does not return until the new memtable has finished flushing but it does NOT delete the old memtables 
+// (that would be caller's responsibility).
 pub fn compact(config: &config::Config, level: u8) -> Option<(memtable::Memtable, Vec<String>)> {
     let compact_candidates = find_compact_candidates(config, level).unwrap();
     if compact_candidates.len() <= 0 {
@@ -15,15 +21,17 @@ pub fn compact(config: &config::Config, level: u8) -> Option<(memtable::Memtable
     }
 
     let mut memtable = memtable::Memtable::new();
-
     let mut compacted_memtable_ids = vec![];
 
+    // combine all the old memtables into a new one while removing duplicates
     for (path, table_meta) in compact_candidates {
         compacted_memtable_ids.push(to_memtable_id(&path));
         let iter = sstable::reader::SstableIterator::new(path, table_meta);
         for entry in iter {
             if entry.deleted {
-                // TODO handle case is older than GC grace period
+                // TODO handle case is older than GC grace period, currently
+                // tombstones are never removed unless the value is re-written
+                // after a delete
                 memtable.insert(entry.key, None);
             } else {
                 memtable.insert(entry.key, Some(entry.value));
@@ -77,6 +85,8 @@ mod compact_tests {
     }
 }
 
+// find sstables that should be compacted at the given level. returns an array
+// of tuples of the path of the sstable and its metadata
 fn find_compact_candidates(
     config: &config::Config,
     level: u8,
