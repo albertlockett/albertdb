@@ -2,5 +2,5 @@ data_dir: /tmp
 memtable_max_count: 3
 sstable_block_size: 64
 compaction_threshold: 256
-compaction_check_period: 30000
+compaction_check_period: 120000
 compaction_max_levels: 4

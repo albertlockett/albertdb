@@ -1,5 +1,5 @@
 ```
-RUST_LOG=info cargo run
+RUST_LOG=debug cargo run -- --config ./config-example.yaml
 ```
 
 Welcome to albertdb, a key-value database.

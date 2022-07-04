@@ -26,6 +26,7 @@ async fn main() -> std::io::Result<()> {
             .route("/write", web::post().to(handle_write))
             .route("/read", web::post().to(handle_read))
             .route("/delete", web::post().to(handle_delete))
+            .route("/force_flush", web::post().to(force_flush))
     });
 
     server
@@ -50,6 +51,16 @@ fn handle_write(
         .write()
         .unwrap()
         .write(req.key.as_bytes(), req.value.as_bytes());
+    HttpResponse::Ok().body("nice")
+}
+
+fn force_flush(
+    mmt_arc: web::Data<Arc<RwLock<Engine>>>
+) -> HttpResponse {
+    mmt_arc
+        .write()
+        .unwrap()
+        .force_flush();
     HttpResponse::Ok().body("nice")
 }
 

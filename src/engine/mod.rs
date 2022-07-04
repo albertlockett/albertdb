@@ -132,6 +132,10 @@ impl Engine {
         return engine;
     }
 
+    pub fn force_flush(&mut self) {
+        self.flush_writable_memtable()
+    }
+
     pub fn write(&mut self, key: &[u8], value: &[u8]) {
         self.writable_wal.write(key, Some(value)).unwrap();
         self.writable_table
