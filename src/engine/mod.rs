@@ -21,9 +21,7 @@ pub struct Engine {
 
 impl Engine {
     // TODO consider whether adding an init method instead of doing all this in the constructor
-    pub fn new() -> Self {
-        let config = config::Config::new();
-
+    pub fn new(config: config::Config) -> Self {
         // derive init state from the WAL that are on disk
         // TODO this needs to take the config as input
         let mut wal_recovery = wal::recover().unwrap();
@@ -138,6 +136,8 @@ impl Engine {
         self.writable_wal.write(key, Some(value)).unwrap();
         self.writable_table
             .insert(key.to_vec(), Some(value.to_vec()));
+        
+        print!("size {}", self.writable_table.size());
         if self.writable_table.size() > self.config.memtable_max_count {
             self.flush_writable_memtable();
         }

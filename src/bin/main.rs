@@ -1,5 +1,6 @@
 use actix_web::{web, App, HttpResponse, HttpServer};
 use albertdb::engine::Engine;
+use clap::{Parser};
 use log;
 use serde::Deserialize;
 use std::str;
@@ -13,7 +14,10 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
     log::info!("starting albertdb with web frontend");
 
-    let memtable_mgr = Engine::new();
+    let args = CliArgs::parse();
+    let config = albertdb::config::Config::from_file(&args.config);
+
+    let memtable_mgr = Engine::new(config);
     let mmt_arc = Arc::new(RwLock::new(memtable_mgr));
 
     let server = HttpServer::new(move || {
@@ -78,4 +82,11 @@ fn handle_delete(
 ) -> HttpResponse {
     mmt_arc.write().unwrap().delete(req.key.as_bytes());
     HttpResponse::Ok().body("OK")
+}
+
+
+#[derive(clap::Parser)]
+struct CliArgs {
+    #[clap(long, value_parser)]
+    config: String,
 }

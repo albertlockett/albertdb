@@ -1,3 +1,5 @@
+use std::fs;
+use log;
 use serde::Deserialize;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -27,10 +29,22 @@ impl Config {
         Config {
             data_dir: String::from("/tmp"),
             memtable_max_count: 3,
-            sstable_block_size: 1024,
+            sstable_block_size: 64,
             compaction_threshold: 256,
-            compaction_check_period: 1000,
+            compaction_check_period: 30000,
             compaction_max_levels: 4,
         }
+    }
+
+    pub fn from_file(x: &str) -> Self {
+        let file_o = fs::OpenOptions::new()
+            .read(true)
+            .open(x);
+        if file_o.is_err() {
+            log::error!("No file can be found {}", x);
+        }
+
+        let config: Config = serde_yaml::from_reader(file_o.unwrap()).unwrap();
+        return config;
     }
 }
