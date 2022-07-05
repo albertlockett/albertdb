@@ -132,6 +132,15 @@ impl Engine {
         return engine;
     }
 
+    pub fn force_compact(&self) {
+        let mut cfg = self.config.clone();
+        cfg.compaction_threshold = 0;
+        for level in 0..cfg.compaction_max_levels {
+            compact(&cfg, self.sstable_reader.clone(), level);
+        }
+        
+    }
+
     pub fn force_flush(&mut self) {
         self.flush_writable_memtable()
     }
@@ -223,5 +232,19 @@ impl Engine {
 
         log::debug!("key '{:?}' not found", key);
         return None;
+    }
+}
+
+pub fn compact(config: &config::Config, compact_reader_ptr: Arc<RwLock<sstable::reader::Reader>>, level: u8) {
+    let compact_result_o = compact::compact(&config, level);
+    if compact_result_o.is_some() {
+        let (new_memtable, compacted_memtable_ids) = compact_result_o.unwrap();
+        let mut reader = compact_reader_ptr.write().unwrap();
+        reader.add_memtable(&new_memtable);
+
+        for sstable_id in &compacted_memtable_ids {
+            reader.remove_memtable(sstable_id);
+            sstable::delete_by_id(&config, sstable_id).unwrap();
+        }
     }
 }
