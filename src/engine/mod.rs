@@ -138,7 +138,6 @@ impl Engine {
         for level in 0..cfg.compaction_max_levels {
             compact(&cfg, self.sstable_reader.clone(), level);
         }
-        
     }
 
     pub fn force_flush(&mut self) {
@@ -149,7 +148,7 @@ impl Engine {
         self.writable_wal.write(key, Some(value)).unwrap();
         self.writable_table
             .insert(key.to_vec(), Some(value.to_vec()));
-        
+
         print!("size {}", self.writable_table.size());
         if self.writable_table.size() > self.config.memtable_max_count {
             self.flush_writable_memtable();
@@ -235,7 +234,11 @@ impl Engine {
     }
 }
 
-pub fn compact(config: &config::Config, compact_reader_ptr: Arc<RwLock<sstable::reader::Reader>>, level: u8) {
+pub fn compact(
+    config: &config::Config,
+    compact_reader_ptr: Arc<RwLock<sstable::reader::Reader>>,
+    level: u8,
+) {
     let compact_result_o = compact::compact(&config, level);
     if compact_result_o.is_some() {
         let (new_memtable, compacted_memtable_ids) = compact_result_o.unwrap();

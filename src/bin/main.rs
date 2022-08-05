@@ -1,7 +1,7 @@
 use actix_web::{web, App, HttpResponse, HttpServer};
 use albertdb::engine::Engine;
 use albertdb::ring;
-use clap::{Parser};
+use clap::Parser;
 use log;
 use serde::Deserialize;
 use std::os::unix::thread;
@@ -20,22 +20,18 @@ async fn main() -> std::io::Result<()> {
     let args = CliArgs::parse();
     let config = albertdb::config::Config::from_file(&args.config);
 
+    let ring = ring::init(&config);
+    let ring_arc = Arc::new(RwLock::new(ring));
+
     // wait the server go
     let threaded_rt = tokio::runtime::Runtime::new()?;
     let ring_svc_config = config.clone();
-    let j = threaded_rt.spawn(async move {
-        println!("I'm here");
-        let x = ring::server::start_server(ring_svc_config).await;
-        println!("here 2");
-        x.unwrap();
+    let ring_svc_ptr = ring_arc.clone();
+    let _handle = threaded_rt.spawn(async move {
+        ring::server::start_server(ring_svc_config, ring_svc_ptr.clone())
+            .await
+            .unwrap();
     });
-    // let _k = threaded_rt.spawn(async move {
-    //     std::thread::sleep(std::time::Duration::from_secs(3));
-    //     ring::server::client_test().await;
-    // });
-    // .await.unwrap();
-
-    
 
     let memtable_mgr = Engine::new(config.clone());
     let mmt_arc = Arc::new(RwLock::new(memtable_mgr));
@@ -45,6 +41,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .data(mmt_arc.clone())
             .data(web_cfg.clone())
+            .data(ring_arc.clone())
             .route("/write", web::post().to(handle_write))
             .route("/read", web::post().to(handle_read))
             .route("/delete", web::post().to(handle_delete))
@@ -61,29 +58,17 @@ async fn main() -> std::io::Result<()> {
         .await
 }
 
-fn force_flush(
-    mmt_arc: web::Data<Arc<RwLock<Engine>>>
-) -> HttpResponse {
-    mmt_arc
-        .write()
-        .unwrap()
-        .force_flush();
+fn force_flush(mmt_arc: web::Data<Arc<RwLock<Engine>>>) -> HttpResponse {
+    mmt_arc.write().unwrap().force_flush();
     HttpResponse::Ok().body("nice")
 }
 
-fn force_compact(
-    mtt_arc: web::Data<Arc<RwLock<Engine>>>
-) -> HttpResponse {
-    mtt_arc
-        .read()
-        .unwrap()
-        .force_compact();
+fn force_compact(mtt_arc: web::Data<Arc<RwLock<Engine>>>) -> HttpResponse {
+    mtt_arc.read().unwrap().force_compact();
     HttpResponse::Ok().body("nice")
 }
 
-fn ring_join(
-    cfg: web::Data<albertdb::config::Config>
-) -> HttpResponse {
+fn ring_join(cfg: web::Data<albertdb::config::Config>) -> HttpResponse {
     let threaded_rt = tokio::runtime::Runtime::new().unwrap();
     let caller_cfg = cfg.as_ref().clone();
     threaded_rt.block_on(async move {
@@ -139,7 +124,6 @@ fn handle_delete(
     mmt_arc.write().unwrap().delete(req.key.as_bytes());
     HttpResponse::Ok().body("OK")
 }
-
 
 #[derive(clap::Parser)]
 struct CliArgs {

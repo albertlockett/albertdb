@@ -1,3 +1,4 @@
+node_id: replica1
 data_dir: /tmp/rep1
 memtable_max_count: 3
 sstable_block_size: 64
@@ -8,3 +9,4 @@ http_listen_port: 40001
 ring_svc_listen_port: 51471
 ring_svc_seed_nodes:
   - http://127.0.01:51472
+ring_svc_broadcast_host: "127.0.0.1"

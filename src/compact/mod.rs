@@ -12,7 +12,7 @@ use crate::sstable;
 // compact stables at a given level. returns the new memtable which old values are compacted into
 // as well as the list of memtable ids that were compacted. It returns None if there were no memtables
 // at the given level that needed compaction.
-// It does not return until the new memtable has finished flushing but it does NOT delete the old memtables 
+// It does not return until the new memtable has finished flushing but it does NOT delete the old memtables
 // (that would be caller's responsibility).
 pub fn compact(config: &config::Config, level: u8) -> Option<(memtable::Memtable, Vec<String>)> {
     let compact_candidates = find_compact_candidates(config, level).unwrap();

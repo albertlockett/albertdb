@@ -4,16 +4,26 @@ package ring;
 
 service Ring {
   rpc GetTopology(GetTopologyRequest) returns (GetTopologyResponse) {}
+  rpc JoinRing(JoinRequest) returns (JoinResponse) {}
 }
 
 message GetTopologyRequest {
-  string test = 1;
 }
 
 message GetTopologyResponse {
-  string test = 2;
+  repeated Node nodes = 1;
+}
+
+message JoinRequest {
+  Node node = 1;
+}
+
+message JoinResponse {
+
 }
 
 message Node {
-  string ipv4Addr = 1;
+  string node_id = 1;
+  string hostname = 2;
+  uint32 port = 3;
 }

@@ -1,9 +1,12 @@
-use std::fs;
 use log;
 use serde::Deserialize;
+use std::fs;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
+    // id of the node
+    pub node_id: String,
+
     // path on disk where data files will be stored
     pub data_dir: String,
 
@@ -29,13 +32,17 @@ pub struct Config {
     pub ring_svc_listen_port: u32,
 
     // list of seed nodes to connect to when trying to join cluster
-    pub ring_svc_seed_nodes: Vec<String>
+    pub ring_svc_seed_nodes: Vec<String>,
+
+    // hostname for this node that is broadcast to other nodes
+    pub ring_svc_broadcast_host: String,
 }
 
 impl Config {
     pub fn new() -> Self {
         // TODO initialize this somehow & choose more reasonable defaults
         Config {
+            node_id: String::from("standalone"),
             data_dir: String::from("/tmp"),
             memtable_max_count: 3,
             sstable_block_size: 64,
@@ -44,16 +51,13 @@ impl Config {
             compaction_max_levels: 4,
             http_listen_port: 4000,
             ring_svc_listen_port: 5147,
-            ring_svc_seed_nodes: vec![
-                "http://127.0.0.1:5147".to_owned()
-            ]
+            ring_svc_seed_nodes: vec!["http://127.0.0.1:5147".to_owned()],
+            ring_svc_broadcast_host: String::from("127.0.0.1"),
         }
     }
 
     pub fn from_file(x: &str) -> Self {
-        let file_o = fs::OpenOptions::new()
-            .read(true)
-            .open(x);
+        let file_o = fs::OpenOptions::new().read(true).open(x);
         if file_o.is_err() {
             log::error!("No file can be found {}", x);
         }
