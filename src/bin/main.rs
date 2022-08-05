@@ -42,12 +42,13 @@ async fn main() -> std::io::Result<()> {
             .data(mmt_arc.clone())
             .data(web_cfg.clone())
             .data(ring_arc.clone())
-            .route("/write", web::post().to(handle_write))
-            .route("/read", web::post().to(handle_read))
-            .route("/delete", web::post().to(handle_delete))
             .route("/force_flush", web::post().to(force_flush))
             .route("/force_compact", web::post().to(force_compact))
             .route("/ring-join", web::post().to(ring_join))
+            .route("/node-status", web::post().to(node_status))
+            .route("/write", web::post().to(handle_write))
+            .route("/read", web::post().to(handle_read))
+            .route("/delete", web::post().to(handle_delete))
     });
 
     server
@@ -68,13 +69,23 @@ fn force_compact(mtt_arc: web::Data<Arc<RwLock<Engine>>>) -> HttpResponse {
     HttpResponse::Ok().body("nice")
 }
 
-fn ring_join(cfg: web::Data<albertdb::config::Config>) -> HttpResponse {
+fn ring_join(
+    cfg: web::Data<albertdb::config::Config>,
+    ring_arc: web::Data<Arc<RwLock<ring::Ring>>>,
+) -> HttpResponse {
     let threaded_rt = tokio::runtime::Runtime::new().unwrap();
     let caller_cfg = cfg.as_ref().clone();
+    let caller_ring_arc = ring_arc.as_ref().clone();
     threaded_rt.block_on(async move {
-        ring::server::start_join(caller_cfg).await;
+        ring::server::start_join(caller_cfg, caller_ring_arc).await;
     });
     HttpResponse::Ok().body("nice")
+}
+
+fn node_status(ring: web::Data<Arc<RwLock<ring::Ring>>>) -> HttpResponse {
+    let rw = ring.read();
+    let status = format!("{:?}", rw.as_ref().unwrap().status);
+    HttpResponse::Ok().body(status)
 }
 
 #[derive(Clone, Debug, Deserialize)]

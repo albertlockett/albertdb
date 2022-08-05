@@ -4,7 +4,7 @@ use log;
 use std::sync::{Arc, RwLock};
 use tonic::{transport, Request, Response, Status};
 
-use super::Node;
+use super::{Node, NodeStatus};
 
 mod ring {
     include!("ring.rs");
@@ -45,11 +45,11 @@ impl ring::ring_server::Ring for RingServerImpl {
     ) -> Result<Response<ring::JoinResponse>, Status> {
         let join_req = grpc_req.get_ref();
         let new_node = join_req.node.as_ref().unwrap();
-        
+
         let ring_arc = self.ring_arc.as_ref().unwrap().clone();
         let mut rw = ring_arc.write();
         let ring = rw.as_mut().unwrap();
-        let new_node = Node{
+        let new_node = Node {
             hostname: new_node.hostname.clone(),
             node_id: new_node.node_id.clone(),
             port: new_node.port,
@@ -73,7 +73,6 @@ pub async fn start_server(
     let mut server = RingServerImpl::default();
     server.ring_arc = Some(ring_arc);
 
-
     log::info!("starting ring server at {}", addr);
 
     tonic::transport::Server::builder()
@@ -84,8 +83,9 @@ pub async fn start_server(
     Ok(())
 }
 
-pub async fn start_join(cfg: config::Config) {
+pub async fn start_join(cfg: config::Config, ring_arc: Arc<RwLock<Ring>>) {
     log::info!("joining cluster");
+    change_status(ring_arc.clone(), NodeStatus::SeedPending);
 
     // Get the ring topology from the seed nodes
     let uri = cfg.ring_svc_seed_nodes[0].clone().to_owned();
@@ -96,15 +96,26 @@ pub async fn start_join(cfg: config::Config) {
     let req = ring::GetTopologyRequest {};
     let get_topo_res = client.get_topology(req).await.unwrap();
     let ring_topo = get_topo_res.into_inner();
+    // TODO if the call above fails, then we're in SeedFailed state
+    // TODO check if another ndoe is already joining and then wait
 
-    log::info!("received cluster topology #nodes: {}", ring_topo.nodes.len());
+    log::info!(
+        "received cluster topology #nodes: {}",
+        ring_topo.nodes.len()
+    );
+
+    change_status(ring_arc.clone(), NodeStatus::Joining);
 
     // send join request to all other nodes in the ring
     for node in &ring_topo.nodes {
         // TODO somehow reuse these clients
         // TODO don't assume it's http
         let node_uri = format!("http://{}:{}", node.hostname, node.port);
-        log::info!("sending join notification to node {} at {}", node.node_id, node_uri);
+        log::info!(
+            "sending join notification to node {} at {}",
+            node.node_id,
+            node_uri
+        );
         let node_endpoint = transport::Endpoint::from_shared(node_uri).unwrap();
         let mut node_client = ring::ring_client::RingClient::connect(node_endpoint)
             .await
@@ -120,4 +131,10 @@ pub async fn start_join(cfg: config::Config) {
         let join_res = node_client.join_ring(join_req).await.unwrap();
         println!("join response {:?}", join_res)
     }
+}
+
+fn change_status(ring_arc: Arc<RwLock<Ring>>, next_status: NodeStatus) {
+    let mut rw = ring_arc.write();
+    let ring = rw.as_mut().unwrap();
+    ring.status = next_status;
 }
