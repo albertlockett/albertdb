@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package ring;
+
+service Ring {
+  rpc GetTopology(GetTopologyRequest) returns (GetTopologyResponse) {}
+}
+
+message GetTopologyRequest {
+  string test = 1;
+}
+
+message GetTopologyResponse {
+  string test = 2;
+}
+
+message Node {
+  string ipv4Addr = 1;
+}

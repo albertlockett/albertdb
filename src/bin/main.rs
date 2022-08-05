@@ -1,8 +1,10 @@
 use actix_web::{web, App, HttpResponse, HttpServer};
 use albertdb::engine::Engine;
+use albertdb::ring;
 use clap::{Parser};
 use log;
 use serde::Deserialize;
+// use tokio::sync::futures;
 use std::str;
 use std::sync::{Arc, RwLock};
 
@@ -13,6 +15,16 @@ use std::sync::{Arc, RwLock};
 async fn main() -> std::io::Result<()> {
     env_logger::init();
     log::info!("starting albertdb with web frontend");
+
+    // wait the server go
+    let threaded_rt = tokio::runtime::Runtime::new()?;
+    let j = threaded_rt.spawn(async move {
+        println!("I'm here");
+        let x = ring::server::start_server().await;
+        println!("here 2");
+        x.unwrap();
+    });
+    // .await.unwrap();
 
     let args = CliArgs::parse();
     let config = albertdb::config::Config::from_file(&args.config);
