@@ -1,7 +1,10 @@
-data_dir: /tmp
+data_dir: /tmp/rep2
 memtable_max_count: 3
 sstable_block_size: 64
 compaction_threshold: 256
 compaction_check_period: 120000
 compaction_max_levels: 4
-ring_svc_listen_port: 5147
+http_listen_port: 40002
+ring_svc_listen_port: 51472
+ring_svc_seed_nodes:
+  - http://127.0.01:51471

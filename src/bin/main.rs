@@ -4,6 +4,7 @@ use albertdb::ring;
 use clap::{Parser};
 use log;
 use serde::Deserialize;
+use std::os::unix::thread;
 // use tokio::sync::futures;
 use std::str;
 use std::sync::{Arc, RwLock};
@@ -16,35 +17,45 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
     log::info!("starting albertdb with web frontend");
 
-    // wait the server go
-    let threaded_rt = tokio::runtime::Runtime::new()?;
-    let j = threaded_rt.spawn(async move {
-        println!("I'm here");
-        let x = ring::server::start_server().await;
-        println!("here 2");
-        x.unwrap();
-    });
-    // .await.unwrap();
-
     let args = CliArgs::parse();
     let config = albertdb::config::Config::from_file(&args.config);
 
-    let memtable_mgr = Engine::new(config);
+    // wait the server go
+    let threaded_rt = tokio::runtime::Runtime::new()?;
+    let ring_svc_config = config.clone();
+    let j = threaded_rt.spawn(async move {
+        println!("I'm here");
+        let x = ring::server::start_server(ring_svc_config).await;
+        println!("here 2");
+        x.unwrap();
+    });
+    // let _k = threaded_rt.spawn(async move {
+    //     std::thread::sleep(std::time::Duration::from_secs(3));
+    //     ring::server::client_test().await;
+    // });
+    // .await.unwrap();
+
+    
+
+    let memtable_mgr = Engine::new(config.clone());
     let mmt_arc = Arc::new(RwLock::new(memtable_mgr));
 
+    let web_cfg = config.clone();
     let server = HttpServer::new(move || {
         App::new()
             .data(mmt_arc.clone())
+            .data(web_cfg.clone())
             .route("/write", web::post().to(handle_write))
             .route("/read", web::post().to(handle_read))
             .route("/delete", web::post().to(handle_delete))
             .route("/force_flush", web::post().to(force_flush))
             .route("/force_compact", web::post().to(force_compact))
+            .route("/ring-join", web::post().to(ring_join))
     });
 
     server
         // TODO add this port to config
-        .bind("127.0.0.1:4000")
+        .bind(format!("127.0.0.1:{}", config.http_listen_port))
         .expect("error binding server")
         .run()
         .await
@@ -67,6 +78,17 @@ fn force_compact(
         .read()
         .unwrap()
         .force_compact();
+    HttpResponse::Ok().body("nice")
+}
+
+fn ring_join(
+    cfg: web::Data<albertdb::config::Config>
+) -> HttpResponse {
+    let threaded_rt = tokio::runtime::Runtime::new().unwrap();
+    let caller_cfg = cfg.as_ref().clone();
+    threaded_rt.block_on(async move {
+        ring::server::start_join(caller_cfg).await;
+    });
     HttpResponse::Ok().body("nice")
 }
 

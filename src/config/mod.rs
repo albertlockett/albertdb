@@ -21,6 +21,15 @@ pub struct Config {
 
     // number of levels for leveld compaction
     pub compaction_max_levels: u8,
+
+    // the port to listen on for http front-end
+    pub http_listen_port: u32,
+
+    // the port the ring topology server will listen on
+    pub ring_svc_listen_port: u32,
+
+    // list of seed nodes to connect to when trying to join cluster
+    pub ring_svc_seed_nodes: Vec<String>
 }
 
 impl Config {
@@ -33,6 +42,11 @@ impl Config {
             compaction_threshold: 256,
             compaction_check_period: 30000,
             compaction_max_levels: 4,
+            http_listen_port: 4000,
+            ring_svc_listen_port: 5147,
+            ring_svc_seed_nodes: vec![
+                "http://127.0.0.1:5147".to_owned()
+            ]
         }
     }
 

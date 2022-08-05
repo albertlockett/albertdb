@@ -1,5 +1,5 @@
 use tonic;
-use tokio;
+use crate::config;
 
 mod ring {
   include!("ring.rs");
@@ -21,9 +21,9 @@ impl ring::ring_server::Ring for RingServerImpl {
   }
 }
 
-pub async fn start_server() -> Result<(), std::sync::Arc<dyn std::error::Error>> {
+pub async fn start_server(cfg: config::Config) -> Result<(), std::sync::Arc<dyn std::error::Error>> {
   println!("listening on 50051");
-  let addr = "127.0.0.1:50051".parse().unwrap();
+  let addr = format!("127.0.0.1:{}", cfg.ring_svc_listen_port).parse().unwrap();
   let server = RingServerImpl::default();
 
   println!("listening on 50051 2");
@@ -37,4 +37,17 @@ pub async fn start_server() -> Result<(), std::sync::Arc<dyn std::error::Error>>
   x.unwrap();
   println!("listening on 50051 done");
   Ok(())
+}
+
+pub async fn start_join(cfg: config::Config) {
+  let uri = cfg.ring_svc_seed_nodes[0].clone().to_owned();
+  let endpoint  = tonic::transport::Endpoint::from_shared(uri).unwrap();
+  let mut client = ring::ring_client::RingClient::connect(endpoint).await.unwrap();
+  let req = ring::GetTopologyRequest{
+    test: "asf".to_owned()
+  };
+
+  println!("making the request");
+  let result = client.get_topology(req).await.unwrap();
+  println!("response = {:?}", result)
 }
