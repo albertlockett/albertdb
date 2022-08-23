@@ -33,7 +33,7 @@ pub async fn start(config: Config) -> Result<()> {
         .await
 }
 
-fn configure(config: Config,  cfg: &mut web::ServiceConfig) {
+pub fn configure(config: Config,  cfg: &mut web::ServiceConfig) {
   let ring = ring::init(&config);
   let ring_arc = Arc::new(RwLock::new(ring));
 
@@ -117,7 +117,6 @@ fn handle_read(
     mmt_arc: web::Data<Arc<RwLock<Engine>>>,
     req: web::Json<ReadPayload>,
 ) -> HttpResponse {
-  print!("HERE!!!!!!!!!!!");
     let found = mmt_arc.read().unwrap().find(req.key.as_bytes());
     if !matches!(found, None) {
         let value = String::from_utf8(found.unwrap()).unwrap();
