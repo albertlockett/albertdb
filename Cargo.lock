@@ -282,6 +282,7 @@ dependencies = [
 name = "albertdb"
 version = "0.1.0"
 dependencies = [
+ "actix-rt",
  "actix-web",
  "clap",
  "env_logger",

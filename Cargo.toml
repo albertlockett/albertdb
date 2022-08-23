@@ -11,7 +11,6 @@ path = "src/lib.rs"
 name = "main1"
 path = "src/bin/main.rs"
 
-
 [dependencies]
 actix-web = "3"
 clap = { version = "3.0", features = ["derive"] }
@@ -27,6 +26,9 @@ serde_json = "1.0.61"
 serde_yaml = "0.8.23"
 tonic = "0.8.0"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+
+[dev-dependencies]
+actix-rt = "1"
 
 [build-dependencies]
 tonic-build = "0.8.0"
