@@ -3,7 +3,7 @@ use crate::ring::Ring;
 use log;
 use std::sync::{Arc, RwLock};
 use tonic::{transport, Request, Response, Status, service::Interceptor};
-
+use futures;
 use super::{Node, NodeStatus};
 
 mod ring {
@@ -13,7 +13,7 @@ mod ring {
 #[derive(Default)]
 pub struct RingServerImpl {
     config: config::Config,
-    ring_arc: Option<Arc<RwLock<Ring>>>,
+    ring_arc: Option<Arc<futures::lock::Mutex<Ring>>>,
 }
 
 #[tonic::async_trait]
@@ -22,11 +22,12 @@ impl ring::ring_server::Ring for RingServerImpl {
         &self,
         _request: Request<ring::GetTopologyRequest>,
     ) -> Result<Response<ring::GetTopologyResponse>, Status> {
-        let ring = self.ring_arc.as_ref().unwrap();
-        let rlock = ring.write().unwrap();
+        let ring_arc = self.ring_arc.as_ref().unwrap();
+        // let rlock = ring.write().unwrap(); 
+        let ring = ring_arc.lock().await;
 
         let mut nodes = Vec::<ring::Node>::new();
-        for n in rlock.nodes.iter() {
+        for n in ring.nodes.iter() {
             let node = ring::Node {
                 hostname: n.hostname.clone(),
                 node_id: n.node_id.clone(),
@@ -48,8 +49,7 @@ impl ring::ring_server::Ring for RingServerImpl {
         let new_node = join_req.node.as_ref().unwrap();
 
         let ring_arc = self.ring_arc.as_ref().unwrap().clone();
-        let mut rw = ring_arc.write();
-        let ring = rw.as_mut().unwrap();
+        let mut ring = ring_arc.lock().await;
         let new_node = Node {
             hostname: new_node.hostname.clone(),
             node_id: new_node.node_id.clone(),
@@ -57,7 +57,7 @@ impl ring::ring_server::Ring for RingServerImpl {
         };
         ring.nodes.push(new_node);
 
-        println!("{:?}", ring);
+        println!("ring nodes {:?}", ring.nodes);
 
         let response = ring::JoinResponse {};
         Ok(Response::new(response))
@@ -68,7 +68,7 @@ impl ring::ring_server::Ring for RingServerImpl {
 
 pub async fn start_server(
     cfg: config::Config,
-    ring_arc: Arc<RwLock<Ring>>,
+    ring_arc: Arc<futures::lock::Mutex<Ring>>,
 ) -> Result<(), std::sync::Arc<dyn std::error::Error>> {
     let addr = format!("127.0.0.1:{}", cfg.ring_svc_listen_port)
         .parse()
@@ -87,9 +87,16 @@ pub async fn start_server(
     Ok(())
 }
 
-pub async fn start_join(cfg: &config::Config, ring_arc: Arc<RwLock<Ring>>) {
+
+pub async fn start_join(
+    cfg: config::Config,
+    ring_arc: Arc<futures::lock::Mutex<Ring>>,
+) {
     log::info!("joining cluster");
-    change_status(ring_arc.clone(), NodeStatus::SeedPending);
+    let mut ring = ring_arc.lock().await;
+
+    // TODO -- we need to call change status here instead
+    ring.status = NodeStatus::SeedPending;
 
     // Get the ring topology from the seed nodes
     let uri = cfg.ring_svc_seed_nodes[0].clone().to_owned();
@@ -108,7 +115,9 @@ pub async fn start_join(cfg: &config::Config, ring_arc: Arc<RwLock<Ring>>) {
         ring_topo.nodes.len()
     );
 
-    change_status(ring_arc.clone(), NodeStatus::Joining);
+    // change_status(ring_arc.clone(), NodeStatus::Joining);
+    // TODO -- we need t call change status here insteed
+    ring.status = NodeStatus::Joining;
 
     // send join request to all other nodes in the ring
     for node in &ring_topo.nodes {

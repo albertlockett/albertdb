@@ -43,7 +43,7 @@ mod tests {
       .send_request(&mut app)
       .await;
     assert!(read_resp.status().is_success(), "failed to read");
-    
+
     // TODO assert on the response
   }
 }
