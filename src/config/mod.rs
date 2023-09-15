@@ -2,7 +2,7 @@ use log;
 use serde::Deserialize;
 use std::fs;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
     // id of the node
     pub node_id: String,

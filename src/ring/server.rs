@@ -2,7 +2,7 @@ use crate::config;
 use crate::ring::Ring;
 use log;
 use std::sync::{Arc, RwLock};
-use tonic::{transport, Request, Response, Status};
+use tonic::{transport, Request, Response, Status, service::Interceptor};
 
 use super::{Node, NodeStatus};
 
@@ -12,6 +12,7 @@ mod ring {
 
 #[derive(Default)]
 pub struct RingServerImpl {
+    config: config::Config,
     ring_arc: Option<Arc<RwLock<Ring>>>,
 }
 
@@ -61,7 +62,9 @@ impl ring::ring_server::Ring for RingServerImpl {
         let response = ring::JoinResponse {};
         Ok(Response::new(response))
     }
+
 }
+
 
 pub async fn start_server(
     cfg: config::Config,
@@ -72,18 +75,19 @@ pub async fn start_server(
         .unwrap();
     let mut server = RingServerImpl::default();
     server.ring_arc = Some(ring_arc);
+    server.config = cfg;
 
     log::info!("starting ring server at {}", addr);
 
-    tonic::transport::Server::builder()
+    let res = tonic::transport::Server::builder()
         .add_service(ring::ring_server::RingServer::new(server))
         .serve(addr)
-        .await
-        .unwrap();
+        .await;
+    res.unwrap();
     Ok(())
 }
 
-pub async fn start_join(cfg: config::Config, ring_arc: Arc<RwLock<Ring>>) {
+pub async fn start_join(cfg: &config::Config, ring_arc: Arc<RwLock<Ring>>) {
     log::info!("joining cluster");
     change_status(ring_arc.clone(), NodeStatus::SeedPending);
 
